@@ -234,6 +234,14 @@
     <div class="field"><label for="f-name">Varenavn</label>
       <input id="f-name" type="text" placeholder="fx Indvendig dør, hvid, 80 cm" autocomplete="off"></div>
     <div class="field"><label for="f-cat">Kategori</label><select id="f-cat"></select></div>
+    <div class="field"><label for="f-location">Placering</label>
+      <select id="f-location">
+        <option value="">Vælg placering</option>
+        <option>Kaolinvej hallen</option>
+        <option>Mineralvej</option>
+        <option>Kaolinvej udendørs</option>
+      </select>
+    </div>
     <div class="cat-add-inline" id="cat-add-inline" hidden>
       <input id="f-newcat" type="text" placeholder="Navn på ny kategori">
       <button class="btn" id="f-newcat-save">Tilføj</button>
@@ -301,6 +309,7 @@
     overlay: document.getElementById('add-overlay'),
     fName: document.getElementById('f-name'),
     fCat: document.getElementById('f-cat'),
+    fLocation: document.getElementById('f-location'),
     fQty: document.getElementById('f-qty'),
     fUnit: document.getElementById('f-unit'),
     fPhoto: document.getElementById('f-photo'),
@@ -385,6 +394,16 @@
     var c = state.categories.find(function(x){ return x.id === id; });
     return c ? c.name : 'Ukategoriseret';
   }
+  function locationName(note){
+    var match = String(note||'').match(/^\[Placering: ([^\]]+)\]\s*/);
+    return match ? match[1] : '';
+  }
+  function itemNote(note){
+    return String(note||'').replace(/^\[Placering: [^\]]+\]\s*/, '');
+  }
+  function storedNote(location, note){
+    return '[Placering: '+location+']'+(note ? ' '+note : '');
+  }
 
   function renderChips(){
     var counts = {};
@@ -414,9 +433,14 @@
         '<div class="edit-form" data-edit-for="'+it.id+'">'+
           '<label>Navn</label><input type="text" class="ed-name" value="'+esc(it.name)+'">'+
           '<label>Kategori</label><select class="ed-cat">'+catOptions+'</select>'+
+          '<label>Placering</label><select class="ed-location">'+
+            '<option value="">Vælg placering</option>'+
+            ['Kaolinvej hallen','Mineralvej','Kaolinvej udendørs'].map(function(location){
+              return '<option'+(location===locationName(it.note)?' selected':'')+'>'+location+'</option>';
+            }).join('')+'</select>'+
           '<div class="row2"><div><label>Antal</label><input type="number" min="0" class="ed-qty" value="'+it.quantity+'"></div>'+
           '<div><label>Enhed</label><input type="text" class="ed-unit" value="'+esc(it.unit||'stk')+'"></div></div>'+
-          '<label>Note</label><input type="text" class="ed-note" value="'+esc(it.note||'')+'">'+
+          '<label>Note</label><input type="text" class="ed-note" value="'+esc(itemNote(it.note))+'">'+
           '<div class="edit-actions"><button class="btn ed-cancel">Annullér</button><button class="btn btn-primary ed-save">Gem</button></div>'+
           '<button class="btn btn-quiet btn-danger ed-delete" style="align-self:flex-start;">'+(confirming?'Bekræft sletning?':'Slet vare')+'</button>'+
         '</div>';
@@ -424,7 +448,8 @@
       body =
         '<div class="card-name">'+esc(it.name)+'</div>'+
         '<div class="card-cat">'+esc(catName(it.category_id))+'</div>'+
-        (it.note ? '<div class="card-note">'+esc(it.note)+'</div>' : '')+
+        (locationName(it.note) ? '<div class="card-note">Placering: '+esc(locationName(it.note))+'</div>' : '')+
+        (itemNote(it.note) ? '<div class="card-note">'+esc(itemNote(it.note))+'</div>' : '')+
         '<div class="qty-row"><span class="qty-num tabular">'+it.quantity+'</span><span class="qty-unit">'+esc(it.unit||'stk')+'</span>'+
         '<span class="qty-pill '+(low?'low':'ok')+'">'+(low?'Tomt':'På lager')+'</span></div>'+
         '<div class="pick-row" data-pick-for="'+it.id+'">'+
@@ -495,6 +520,7 @@
         saveEdit(it, {
           name: form.querySelector('.ed-name').value.trim(),
           category_id: form.querySelector('.ed-cat').value,
+          location: form.querySelector('.ed-location').value,
           quantity: Math.max(0, parseInt(form.querySelector('.ed-qty').value,10)||0),
           unit: form.querySelector('.ed-unit').value.trim() || 'stk',
           note: form.querySelector('.ed-note').value.trim(),
@@ -539,8 +565,11 @@
   function saveEdit(it, data){
     if(!sb) return;
     if(!data.name){ showToast('Varen skal have et navn.'); return; }
+    if(!data.category_id){ showToast('Vælg en kategori.'); return; }
+    if(!data.location){ showToast('Vælg en placering.'); return; }
     sb.from('items').update({
-      name:data.name, category_id:data.category_id, quantity:data.quantity, unit:data.unit, note:data.note, updated_at:new Date().toISOString()
+      name:data.name, category_id:data.category_id, quantity:data.quantity, unit:data.unit,
+      note:storedNote(data.location, data.note), updated_at:new Date().toISOString()
     }).eq('id', it.id).then(function(res){
       if(res.error){ showToast('Kunne ikke gemme ændringen.'); return; }
       state.editingId = null; showToast('Vare opdateret.'); refreshAll();
@@ -567,7 +596,7 @@
   /* ---------------- add-item modal ---------------- */
 
   function resetForm(){
-    els.fName.value=''; els.fQty.value='1'; els.fUnit.value='stk'; els.fNote.value=''; els.fPhoto.value='';
+    els.fName.value=''; els.fQty.value='1'; els.fUnit.value='stk'; els.fNote.value=''; els.fPhoto.value=''; els.fLocation.value='';
     els.formMsg.textContent=''; pendingPhotoPath=null;
     els.photoPreview.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.5"/></svg>';
     els.catAddInline.hidden = true; els.fNewcat.value='';
@@ -625,14 +654,16 @@
   document.getElementById('save-add-btn').addEventListener('click', function(){
     var name = els.fName.value.trim();
     var category_id = els.fCat.value;
+    var location = els.fLocation.value;
     var qty = Math.max(0, parseInt(els.fQty.value,10)||0);
     var unit = els.fUnit.value.trim() || 'stk';
     var note = els.fNote.value.trim();
     if(!name){ els.formMsg.textContent='Skriv et varenavn.'; els.fName.focus(); return; }
     if(!category_id){ els.formMsg.textContent='Vælg eller opret en kategori.'; return; }
+    if(!location){ els.formMsg.textContent='Vælg en placering.'; els.fLocation.focus(); return; }
     if(!sb){ els.formMsg.textContent='Forbindelsen til lagersystemet mangler at blive sat op.'; return; }
     sb.from('items').insert({
-      name:name, category_id:category_id, quantity:qty, unit:unit, note:note, photo_path:pendingPhotoPath
+      name:name, category_id:category_id, quantity:qty, unit:unit, note:storedNote(location, note), photo_path:pendingPhotoPath
     }).then(function(res){
       if(res.error){ els.formMsg.textContent='Kunne ikke gemme varen. Prøv igen.'; return; }
       closeAdd(); showToast('Tilføjet: '+name); refreshAll();
