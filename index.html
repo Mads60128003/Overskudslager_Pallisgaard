@@ -618,10 +618,10 @@
     return isNaN(date.getTime()) ? value : date.toLocaleString('da-DK',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   }
   function materialHistoryHtml(history){
-    if(!history.length) return '';
-    return '<details class="material-history"><summary>Seneste udlån ('+history.length+')</summary>'+history.slice().reverse().map(function(entry){
+    var rows = history.slice().reverse().map(function(entry){
       return '<div class="history-row"><div><div class="history-label">Adresse/sagsnr.</div>'+esc(entry.target)+'</div><div><div class="history-label">Udlånt</div>'+esc(formatDate(entry.loanedAt))+'</div><div><div class="history-label">Afleveret</div>'+esc(formatDate(entry.returnedAt))+'<br><span class="history-label">Formand: '+esc(entry.foreman)+'</span></div></div>';
-    }).join('')+'</details>';
+    }).join('');
+    return '<details class="material-history"><summary>Seneste udlån ('+history.length+')</summary>'+(rows || '<p>Ingen udlån registreret endnu.</p>')+'</details>';
   }
   function materialDescription(note){
     var match = String(note||'').match(/\[Beskrivelse: ([^\]]+)\]/);
