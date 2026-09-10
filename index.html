@@ -311,8 +311,8 @@
     <form class="material-form" id="material-form">
       <label for="m-name">Materiel navn</label>
       <input id="m-name" required placeholder="fx Truck, palleløfter eller glasløfter">
-      <select id="m-cat" required><option value="">Vælg kategori</option></select>
-      <input id="m-newcat" placeholder="Ny kategori (valgfri)">
+      <select id="m-cat"><option value="">Vælg kategori</option></select>
+      <input id="m-newcat" placeholder="Ny kategori (hvis ingen kategori er valgt)">
       <select id="m-location" required><option value="">Vælg placering</option><option>Kaolinvej hallen</option><option>Mineralvej</option><option>Kaolinvej udendørs</option></select>
       <label for="m-note">Beskrivelse af materiel</label>
       <input id="m-note" placeholder="Beskriv fx model, størrelse eller stand (valgfri)">
@@ -868,7 +868,8 @@
   els.materialForm.addEventListener('submit', function(e){
     e.preventDefault();
     var name=els.materialName.value.trim(), catId=els.materialCat.value, newCat=els.materialNewCat.value.trim(), location=els.materialLocation.value;
-    if(!name || !location || (!catId && !newCat)){ els.materialMsg.textContent='Udfyld navn, kategori og placering.'; return; }
+    if(!name || !location){ els.materialMsg.textContent='Udfyld navn og placering.'; return; }
+    if(!catId && !newCat){ els.materialMsg.textContent='Vælg en kategori eller skriv en ny kategori.'; return; }
     function saveMaterial(categoryId){
       var file=els.materialPhoto.files && els.materialPhoto.files[0];
       function insert(photo){
