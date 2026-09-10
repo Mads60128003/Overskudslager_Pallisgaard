@@ -536,7 +536,6 @@
   function render(){
     var term = state.search.trim().toLowerCase();
     var filtered = state.items.filter(function(it){
-      if(state.activeCat !== 'all' && it.category_id !== state.activeCat) return false;
       if(term && it.name.toLowerCase().indexOf(term) === -1) return false;
       return true;
     });
@@ -608,7 +607,15 @@
     ]).then(function(res){
       var catRes = res[0], itemRes = res[1];
       if(!catRes.error) state.categories = catRes.data || [];
-      if(!itemRes.error) state.items = itemRes.data || [];
+      if(!itemRes.error){
+        state.items = (itemRes.data || []).filter(function(it){ return Number(it.quantity) > 0; });
+        (itemRes.data || []).filter(function(it){ return Number(it.quantity) <= 0; }).forEach(function(it){
+          sb.from('items')['delete']().eq('id', it.id).then(function(deleteRes){
+            if(deleteRes.error) showToast('Kunne ikke slette en tom vare.');
+          });
+        });
+      }
+      state.activeCat = 'all';
       populateCatSelect();
       render();
     }).catch(function(){ showToast('Kunne ikke hente lagerdata. Tjek din internetforbindelse.'); });
@@ -633,6 +640,7 @@
     if(!data.name){ showToast('Varen skal have et navn.'); return; }
     if(!data.category_id){ showToast('Vælg en kategori.'); return; }
     if(!data.location){ showToast('Vælg en placering.'); return; }
+    if(data.quantity <= 0){ deleteItem(it); return; }
     sb.from('items').update({
       name:data.name, category_id:data.category_id, quantity:data.quantity, unit:data.unit,
       note:storedNote(data.location, data.note), updated_at:new Date().toISOString()
