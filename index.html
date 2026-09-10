@@ -555,9 +555,12 @@
     if(!sb) return;
     amount = Math.max(1, Math.min(amount, it.quantity));
     var newQty = Math.max(0, it.quantity - amount);
-    sb.from('items').update({ quantity:newQty, updated_at:new Date().toISOString() }).eq('id', it.id).then(function(res){
+    var operation = newQty === 0
+      ? sb.from('items')['delete']().eq('id', it.id)
+      : sb.from('items').update({ quantity:newQty, updated_at:new Date().toISOString() }).eq('id', it.id);
+    operation.then(function(res){
       if(res.error){ showToast('Kunne ikke opdatere lageret.'); return; }
-      showToast('Plukkede '+amount+' '+(it.unit||'stk')+' – '+it.name);
+      showToast(newQty === 0 ? 'Varen er udsolgt og slettet.' : 'Plukkede '+amount+' '+(it.unit||'stk')+' – '+it.name);
       refreshAll();
     });
   }
