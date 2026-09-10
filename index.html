@@ -65,9 +65,18 @@
   #gate-error{color:var(--low); font-size:.82rem; min-height:1.2em;}
   .site-choice{display:flex; flex-direction:column; gap:10px;}
   .site-choice .btn{justify-content:center; padding:13px 16px;}
-  #materiel-view{max-width:600px; margin:70px auto; text-align:center;}
+  #materiel-view{max-width:980px; margin:24px auto; padding:0 16px;}
   #materiel-view[hidden]{display:none;}
   #materiel-view p{color:var(--ink-soft);}
+  .material-header{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px;}
+  .material-form{display:grid; gap:10px; max-width:520px; margin:0 auto 28px; padding:18px; background:var(--panel); border:1px solid var(--line); border-radius:12px;}
+  .material-form input,.material-form select{padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2);}
+  .material-list{display:grid; gap:12px;}
+  .material-card{display:grid; grid-template-columns:110px 1fr auto; gap:14px; align-items:center; padding:14px; background:var(--panel); border:1px solid var(--line); border-radius:12px;}
+  .material-card img,.material-photo-placeholder{width:110px; height:90px; object-fit:cover; border-radius:8px; background:var(--panel-2);}
+  .material-photo-placeholder{display:grid; place-items:center; color:var(--ink-faint);}
+  .material-loan{color:var(--low); font-weight:700;}
+  @media(max-width:600px){.material-card{grid-template-columns:80px 1fr;}.material-card .btn{grid-column:2;}.material-card img,.material-photo-placeholder{width:80px;height:70px;}}
 
   body.locked > *:not(#gate){display:none;}
 
@@ -225,9 +234,18 @@
 </header>
 
 <section id="materiel-view" hidden>
-  <h2>Materiel</h2>
-  <p>Materiel-lageret er klar til indhold.</p>
-  <button class="btn btn-primary" data-change-site type="button">Skift område</button>
+  <div class="material-header"><div><h2>Materiel</h2><p>Opret og hold styr på materiel, der kan lånes ud.</p></div><button class="btn" data-change-site type="button">Skift område</button></div>
+  <form class="material-form" id="material-form">
+    <h3>Opret materiel</h3>
+    <input id="m-name" required placeholder="Navn på materiel">
+    <select id="m-cat" required><option value="">Vælg kategori</option></select>
+    <input id="m-newcat" placeholder="Ny kategori (valgfri)">
+    <select id="m-location" required><option value="">Vælg placering</option><option>Kaolinvej hallen</option><option>Mineralvej</option><option>Kaolinvej udendørs</option></select>
+    <input id="m-photo" type="file" accept="image/*" capture="environment">
+    <button class="btn btn-primary" type="submit">Opret materiel</button>
+    <div id="m-msg" role="status"></div>
+  </form>
+  <div class="material-list" id="material-list"></div>
 </section>
 
 <main id="overskud-main">
@@ -346,6 +364,14 @@
     gateCode: document.getElementById('gate-code'),
     gateError: document.getElementById('gate-error'),
     gateSubmit: document.getElementById('gate-submit'),
+    materialForm: document.getElementById('material-form'),
+    materialName: document.getElementById('m-name'),
+    materialCat: document.getElementById('m-cat'),
+    materialNewCat: document.getElementById('m-newcat'),
+    materialLocation: document.getElementById('m-location'),
+    materialPhoto: document.getElementById('m-photo'),
+    materialList: document.getElementById('material-list'),
+    materialMsg: document.getElementById('m-msg'),
   };
 
   function esc(s){
@@ -420,6 +446,7 @@
     document.getElementById('overskud-main').hidden = true;
     document.getElementById('fab-add').hidden = true;
     document.getElementById('materiel-view').hidden = false;
+    refreshMaterial();
   }
   function changeSite(){
     try{ localStorage.removeItem('tl_site'); }catch(e){}
@@ -466,6 +493,18 @@
   }
   function storedNote(location, note){
     return '[Placering: '+location+']'+(note ? ' '+note : '');
+  }
+  function isMateriel(note){ return String(note||'').indexOf('[Materiel]') === 0; }
+  function materialLocation(note){
+    var match = String(note||'').match(/\[Placering: ([^\]]+)\]/);
+    return match ? match[1] : '';
+  }
+  function materialLoan(note){
+    var match = String(note||'').match(/\[Udlån: adresse\/sag=([^;]+); formand=([^\]]+)\]/);
+    return match ? { target:match[1], foreman:match[2] } : null;
+  }
+  function materialNote(location, loan){
+    return '[Materiel][Placering: '+location+']'+(loan ? ' [Udlån: adresse/sag='+loan.target+'; formand='+loan.foreman+']' : '');
   }
 
   function renderChips(){
@@ -599,6 +638,41 @@
 
   /* ---------------- data ops ---------------- */
 
+  function populateMaterialCategories(){
+    els.materialCat.innerHTML = '<option value="">Vælg kategori</option>'+state.categories.map(function(c){
+      return '<option value="'+c.id+'">'+esc(c.name)+'</option>';
+    }).join('');
+  }
+  function refreshMaterial(){
+    if(!sb) return;
+    Promise.all([sb.from('categories').select('*').order('name'), sb.from('items').select('*')]).then(function(res){
+      if(!res[0].error) state.categories = res[0].data || [];
+      var items = !res[1].error ? (res[1].data || []).filter(function(it){ return isMateriel(it.note) && Number(it.quantity) > 0; }) : [];
+      populateMaterialCategories();
+      renderMaterial(items);
+    });
+  }
+  function renderMaterial(items){
+    if(!items.length){ els.materialList.innerHTML = '<p>Der er ikke oprettet materiel endnu.</p>'; return; }
+    els.materialList.innerHTML = items.sort(function(a,b){ return a.name.localeCompare(b.name,'da'); }).map(function(it){
+      var loan = materialLoan(it.note), url = photoUrl(it.photo_path);
+      var photo = url ? '<img src="'+esc(url)+'" alt="">' : '<div class="material-photo-placeholder">Intet billede</div>';
+      var action = loan
+        ? '<div><div class="material-loan">UDLÅN</div><div>'+esc(loan.target)+'</div><div>Ansvarlig: '+esc(loan.foreman)+'</div><button class="btn material-return" data-id="'+it.id+'">Registrér aflevering</button></div>'
+        : '<button class="btn btn-primary material-loan-btn" data-id="'+it.id+'">Lån ud</button>';
+      return '<article class="material-card">'+photo+'<div><h3>'+esc(it.name)+'</h3><div>'+esc(catName(it.category_id))+'</div><div>Placering: '+esc(materialLocation(it.note))+'</div></div>'+action+'</article>';
+    }).join('');
+    els.materialList.querySelectorAll('.material-loan-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){ var target=prompt('Adresse eller sagsnummer:'); if(!target) return; var foreman=prompt('Ansvarlig formand:'); if(!foreman) return;
+        var it=items.find(function(x){return x.id===btn.getAttribute('data-id');});
+        sb.from('items').update({note:materialNote(materialLocation(it.note), {target:target.trim(), foreman:foreman.trim()}), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere udlån.');return;} showToast('Materiellet er lånt ud.'); refreshMaterial(); });
+      });
+    });
+    els.materialList.querySelectorAll('.material-return').forEach(function(btn){
+      btn.addEventListener('click', function(){ var it=items.find(function(x){return x.id===btn.getAttribute('data-id');}); sb.from('items').update({note:materialNote(materialLocation(it.note), null), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere aflevering.');return;} showToast('Materiellet er afleveret.'); refreshMaterial(); }); });
+    });
+  }
+
   function refreshAll(){
     if(!sb) return;
     Promise.all([
@@ -608,13 +682,14 @@
       var catRes = res[0], itemRes = res[1];
       if(!catRes.error) state.categories = catRes.data || [];
       if(!itemRes.error){
-        state.items = (itemRes.data || []).filter(function(it){ return Number(it.quantity) > 0; });
+        state.items = (itemRes.data || []).filter(function(it){ return Number(it.quantity) > 0 && !isMateriel(it.note); });
         (itemRes.data || []).filter(function(it){ return Number(it.quantity) <= 0; }).forEach(function(it){
           sb.from('items')['delete']().eq('id', it.id).then(function(deleteRes){
             if(deleteRes.error) showToast('Kunne ikke slette en tom vare.');
           });
         });
       }
+
       state.activeCat = 'all';
       populateCatSelect();
       render();
@@ -695,6 +770,26 @@
   document.getElementById('close-add-btn').addEventListener('click', closeAdd);
   document.getElementById('cancel-add-btn').addEventListener('click', closeAdd);
   els.overlay.addEventListener('click', function(e){ if(e.target===els.overlay) closeAdd(); });
+
+  els.materialForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    var name=els.materialName.value.trim(), catId=els.materialCat.value, newCat=els.materialNewCat.value.trim(), location=els.materialLocation.value;
+    if(!name || !location || (!catId && !newCat)){ els.materialMsg.textContent='Udfyld navn, kategori og placering.'; return; }
+    function saveMaterial(categoryId){
+      var file=els.materialPhoto.files && els.materialPhoto.files[0];
+      function insert(photo){
+        sb.from('items').insert({name:name, category_id:categoryId, quantity:1, unit:'stk', note:materialNote(location,null), photo_path:photo}).then(function(res){
+          if(res.error){ els.materialMsg.textContent='Kunne ikke gemme materiellet.'; return; }
+          els.materialForm.reset(); els.materialMsg.textContent='Materiel oprettet.'; refreshMaterial();
+        });
+      }
+      if(!file){ insert(null); return; }
+      compressPhoto(file, function(err,dataUrl){ if(err){ els.materialMsg.textContent='Billedet kunne ikke læses.'; return; } insert(dataUrl); });
+    }
+    if(newCat){
+      addCategory(newCat, function(id){ saveMaterial(id); });
+    } else saveMaterial(catId);
+  });
 
   document.getElementById('f-newcat-toggle').addEventListener('click', function(){
     els.catAddInline.hidden = !els.catAddInline.hidden;
