@@ -753,6 +753,44 @@
       if(cb) cb(res.data[0].id);
     });
   }
+  function normalizedCategoryName(name){
+    return String(name||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');
+  }
+  function categoryDistance(a,b){
+    var prev = [], i, j, cost, current;
+    for(i=0;i<=b.length;i++) prev[i]=i;
+    for(j=1;j<=a.length;j++){
+      current=[j];
+      for(i=1;i<=b.length;i++){
+        cost = a.charAt(j-1) === b.charAt(i-1) ? 0 : 1;
+        current[i] = Math.min(current[i-1]+1, prev[i]+1, prev[i-1]+cost);
+      }
+      prev=current;
+    }
+    return prev[b.length];
+  }
+  function findSimilarCategory(name){
+    var normalized = normalizedCategoryName(name), best = null, bestScore = Infinity;
+    state.categories.forEach(function(category){
+      var candidate = normalizedCategoryName(category.name);
+      if(!normalized || !candidate) return;
+      var distance = categoryDistance(normalized, candidate);
+      var threshold = Math.max(1, Math.floor(Math.max(normalized.length, candidate.length) * 0.25));
+      if(distance <= threshold && distance < bestScore){ best = category; bestScore = distance; }
+    });
+    return best;
+  }
+  function resolveCategory(name, cb){
+    var category = findSimilarCategory(name);
+    if(category){
+      if(normalizedCategoryName(category.name) !== normalizedCategoryName(name)){
+        showToast('Bruger eksisterende kategori: '+category.name);
+      }
+      cb(category.id);
+      return;
+    }
+    addCategory(name, cb);
+  }
 
   /* ---------------- add-item modal ---------------- */
 
@@ -799,7 +837,7 @@
       compressPhoto(file, function(err,dataUrl){ if(err){ els.materialMsg.textContent='Billedet kunne ikke læses.'; return; } insert(dataUrl); });
     }
     if(newCat){
-      addCategory(newCat, function(id){ saveMaterial(id); });
+      resolveCategory(newCat, function(id){ saveMaterial(id); });
     } else saveMaterial(catId);
   });
 
@@ -845,15 +883,20 @@
     var unit = els.fUnit.value.trim() || 'stk';
     var note = els.fNote.value.trim();
     if(!name){ els.formMsg.textContent='Skriv et varenavn.'; els.fName.focus(); return; }
-    if(!category_id){ els.formMsg.textContent='Vælg eller opret en kategori.'; return; }
+    var newCategory = els.fNewcat.value.trim();
+    if(!category_id && !newCategory){ els.formMsg.textContent='Vælg eller skriv en kategori.'; return; }
     if(!location){ els.formMsg.textContent='Vælg en placering.'; els.fLocation.focus(); return; }
     if(!sb){ els.formMsg.textContent='Forbindelsen til lagersystemet mangler at blive sat op.'; return; }
-    sb.from('items').insert({
-      name:name, category_id:category_id, quantity:qty, unit:unit, note:storedNote(location, note), photo_path:pendingPhotoPath
-    }).then(function(res){
-      if(res.error){ els.formMsg.textContent='Kunne ikke gemme varen. Prøv igen.'; return; }
-      closeAdd(); showToast('Tilføjet: '+name); refreshAll();
-    });
+    function saveItem(resolvedCategoryId){
+      sb.from('items').insert({
+        name:name, category_id:resolvedCategoryId, quantity:qty, unit:unit, note:storedNote(location, note), photo_path:pendingPhotoPath
+      }).then(function(res){
+        if(res.error){ els.formMsg.textContent='Kunne ikke gemme varen. Prøv igen.'; return; }
+        closeAdd(); showToast('Tilføjet: '+name); refreshAll();
+      });
+    }
+    if(newCategory) resolveCategory(newCategory, saveItem);
+    else saveItem(category_id);
   });
 
   els.search.addEventListener('input', function(){ state.search = els.search.value; render(); });
