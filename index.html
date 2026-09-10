@@ -237,10 +237,13 @@
   <div class="material-header"><div><h2>Materiel</h2><p>Opret og hold styr på materiel, der kan lånes ud.</p></div><button class="btn" data-change-site type="button">Skift område</button></div>
   <form class="material-form" id="material-form">
     <h3>Opret materiel</h3>
-    <input id="m-name" required placeholder="Navn på materiel">
+    <label for="m-name">Materiel navn</label>
+    <input id="m-name" required placeholder="fx Truck, palleløfter eller glasløfter">
     <select id="m-cat" required><option value="">Vælg kategori</option></select>
     <input id="m-newcat" placeholder="Ny kategori (valgfri)">
     <select id="m-location" required><option value="">Vælg placering</option><option>Kaolinvej hallen</option><option>Mineralvej</option><option>Kaolinvej udendørs</option></select>
+    <label for="m-note">Beskrivelse af materiel</label>
+    <input id="m-note" placeholder="Beskriv fx model, størrelse eller stand (valgfri)">
     <input id="m-photo" type="file" accept="image/*" capture="environment">
     <button class="btn btn-primary" type="submit">Opret materiel</button>
     <div id="m-msg" role="status"></div>
@@ -369,6 +372,7 @@
     materialCat: document.getElementById('m-cat'),
     materialNewCat: document.getElementById('m-newcat'),
     materialLocation: document.getElementById('m-location'),
+    materialNote: document.getElementById('m-note'),
     materialPhoto: document.getElementById('m-photo'),
     materialList: document.getElementById('material-list'),
     materialMsg: document.getElementById('m-msg'),
@@ -503,8 +507,12 @@
     var match = String(note||'').match(/\[Udlån: adresse\/sag=([^;]+); formand=([^\]]+)\]/);
     return match ? { target:match[1], foreman:match[2] } : null;
   }
-  function materialNote(location, loan){
-    return '[Materiel][Placering: '+location+']'+(loan ? ' [Udlån: adresse/sag='+loan.target+'; formand='+loan.foreman+']' : '');
+  function materialNote(location, description, loan){
+    return '[Materiel][Placering: '+location+']'+(description ? ' [Beskrivelse: '+description+']' : '')+(loan ? ' [Udlån: adresse/sag='+loan.target+'; formand='+loan.foreman+']' : '');
+  }
+  function materialDescription(note){
+    var match = String(note||'').match(/\[Beskrivelse: ([^\]]+)\]/);
+    return match ? match[1] : '';
   }
 
   function renderChips(){
@@ -660,16 +668,16 @@
       var action = loan
         ? '<div><div class="material-loan">UDLÅN</div><div>'+esc(loan.target)+'</div><div>Ansvarlig: '+esc(loan.foreman)+'</div><button class="btn material-return" data-id="'+it.id+'">Registrér aflevering</button></div>'
         : '<button class="btn btn-primary material-loan-btn" data-id="'+it.id+'">Lån ud</button>';
-      return '<article class="material-card">'+photo+'<div><h3>'+esc(it.name)+'</h3><div>'+esc(catName(it.category_id))+'</div><div>Placering: '+esc(materialLocation(it.note))+'</div></div>'+action+'</article>';
+      return '<article class="material-card">'+photo+'<div><h3>'+esc(it.name)+'</h3><div>'+esc(catName(it.category_id))+'</div><div>Placering: '+esc(materialLocation(it.note))+'</div>'+(materialDescription(it.note)?'<div>'+esc(materialDescription(it.note))+'</div>':'')+'</div>'+action+'</article>';
     }).join('');
     els.materialList.querySelectorAll('.material-loan-btn').forEach(function(btn){
       btn.addEventListener('click', function(){ var target=prompt('Adresse eller sagsnummer:'); if(!target) return; var foreman=prompt('Ansvarlig formand:'); if(!foreman) return;
         var it=items.find(function(x){return x.id===btn.getAttribute('data-id');});
-        sb.from('items').update({note:materialNote(materialLocation(it.note), {target:target.trim(), foreman:foreman.trim()}), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere udlån.');return;} showToast('Materiellet er lånt ud.'); refreshMaterial(); });
+        sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), {target:target.trim(), foreman:foreman.trim()}), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere udlån.');return;} showToast('Materiellet er lånt ud.'); refreshMaterial(); });
       });
     });
     els.materialList.querySelectorAll('.material-return').forEach(function(btn){
-      btn.addEventListener('click', function(){ var it=items.find(function(x){return x.id===btn.getAttribute('data-id');}); sb.from('items').update({note:materialNote(materialLocation(it.note), null), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere aflevering.');return;} showToast('Materiellet er afleveret.'); refreshMaterial(); }); });
+      btn.addEventListener('click', function(){ var it=items.find(function(x){return x.id===btn.getAttribute('data-id');}); sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), null), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere aflevering.');return;} showToast('Materiellet er afleveret.'); refreshMaterial(); }); });
     });
   }
 
@@ -778,7 +786,7 @@
     function saveMaterial(categoryId){
       var file=els.materialPhoto.files && els.materialPhoto.files[0];
       function insert(photo){
-        sb.from('items').insert({name:name, category_id:categoryId, quantity:1, unit:'stk', note:materialNote(location,null), photo_path:photo}).then(function(res){
+        sb.from('items').insert({name:name, category_id:categoryId, quantity:1, unit:'stk', note:materialNote(location, els.materialNote.value.trim(), null), photo_path:photo}).then(function(res){
           if(res.error){ els.materialMsg.textContent='Kunne ikke gemme materiellet.'; return; }
           els.materialForm.reset(); els.materialMsg.textContent='Materiel oprettet.'; refreshMaterial();
         });
