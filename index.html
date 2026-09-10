@@ -217,6 +217,7 @@
     <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M14 14L18 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     <input id="search" type="search" placeholder="Søg efter vare…" autocomplete="off">
   </div>
+  <button class="btn" data-change-site type="button">Skift område</button>
   <button class="btn btn-primary" id="open-add-btn">
     <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     Ny vare
@@ -226,7 +227,7 @@
 <section id="materiel-view" hidden>
   <h2>Materiel</h2>
   <p>Materiel-lageret er klar til indhold.</p>
-  <button class="btn btn-primary" id="change-site-btn" type="button">Skift område</button>
+  <button class="btn btn-primary" data-change-site type="button">Skift område</button>
 </section>
 
 <main id="overskud-main">
@@ -436,7 +437,9 @@
       if(btn.getAttribute('data-site-choice') === 'materiel') showMateriel(); else showOverskud();
     });
   });
-  document.getElementById('change-site-btn').addEventListener('click', changeSite);
+  document.querySelectorAll('[data-change-site]').forEach(function(btn){
+    btn.addEventListener('click', changeSite);
+  });
 
   var alreadyUnlocked = false;
   try{ alreadyUnlocked = localStorage.getItem('tl_unlocked') === '1'; }catch(e){}
