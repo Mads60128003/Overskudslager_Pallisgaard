@@ -768,11 +768,11 @@
         var it=items.find(function(x){return x.id===btn.getAttribute('data-id');});
         sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), {target:target.trim(), foreman:foreman.trim()}), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere udlån.');return;} showToast('Materiellet er lånt ud.'); refreshMaterial(); });
       });
-      els.materialList.querySelectorAll('.material-edit-btn').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var it=items.find(function(x){ return x.id===btn.getAttribute('data-id'); });
-          if(it) openMaterialEdit(it);
-        });
+    });
+    els.materialList.querySelectorAll('.material-edit-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var it=items.find(function(x){ return x.id===btn.getAttribute('data-id'); });
+        if(it) openMaterialEdit(it);
       });
     });
     els.materialList.querySelectorAll('.material-return').forEach(function(btn){
@@ -941,43 +941,6 @@
           els.materialForm.reset(); closeMaterialForm(); showToast('Materiel oprettet.'); refreshMaterial();
         });
 
-        document.getElementById('delete-material-btn').addEventListener('click', function(){
-          if(!editingMaterial) return;
-          if(!confirm('Vil du slette dette materiel?')) return;
-          sb.from('items')['delete']().eq('id', editingMaterial.id).then(function(res){
-            if(res.error){ els.materialEditMsg.textContent='Kunne ikke slette materiellet.'; return; }
-            closeMaterialEdit(); showToast('Materiel slettet.'); refreshMaterial();
-          });
-        });
-        els.materialEditForm.addEventListener('submit', function(e){
-          e.preventDefault();
-          if(!editingMaterial) return;
-          var name=els.materialEditName.value.trim(), catId=els.materialEditCat.value, newCat=els.materialEditNewCat.value.trim(), location=els.materialEditLocation.value;
-          if(!name || !location){ els.materialEditMsg.textContent='Udfyld navn og placering.'; return; }
-          if(!catId && !newCat){ els.materialEditMsg.textContent='Vælg en kategori eller skriv en ny kategori.'; return; }
-          function updateMaterial(categoryId, photo){
-            var loan=materialLoan(editingMaterial.note);
-            sb.from('items').update({
-              name:name, category_id:categoryId, photo_path:photo,
-              note:materialNote(location, els.materialEditNote.value.trim(), loan),
-              updated_at:new Date().toISOString()
-            }).eq('id', editingMaterial.id).then(function(res){
-              if(res.error){ els.materialEditMsg.textContent='Kunne ikke gemme ændringen.'; return; }
-              closeMaterialEdit(); showToast('Materiel opdateret.'); refreshMaterial();
-            });
-          }
-          var file=els.materialEditPhoto.files && els.materialEditPhoto.files[0];
-          if(!file){
-            if(newCat) resolveCategory(newCat, function(id){ updateMaterial(id, editingMaterial.photo_path); }, siteCategoryIds.materiel);
-            else updateMaterial(catId, editingMaterial.photo_path);
-            return;
-          }
-          compressPhoto(file, function(err,dataUrl){
-            if(err){ els.materialEditMsg.textContent='Billedet kunne ikke læses.'; return; }
-            if(newCat) resolveCategory(newCat, function(id){ updateMaterial(id, dataUrl); }, siteCategoryIds.materiel);
-            else updateMaterial(catId, dataUrl);
-          });
-        });
       }
       if(!file){ insert(null); return; }
       compressPhoto(file, function(err,dataUrl){ if(err){ els.materialMsg.textContent='Billedet kunne ikke læses.'; return; } insert(dataUrl); });
@@ -985,6 +948,44 @@
     if(newCat){
       resolveCategory(newCat, function(id){ saveMaterial(id); }, siteCategoryIds.materiel);
     } else saveMaterial(catId);
+  });
+
+  document.getElementById('delete-material-btn').addEventListener('click', function(){
+    if(!editingMaterial) return;
+    if(!confirm('Vil du slette dette materiel?')) return;
+    sb.from('items')['delete']().eq('id', editingMaterial.id).then(function(res){
+      if(res.error){ els.materialEditMsg.textContent='Kunne ikke slette materiellet.'; return; }
+      closeMaterialEdit(); showToast('Materiel slettet.'); refreshMaterial();
+    });
+  });
+  els.materialEditForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    if(!editingMaterial) return;
+    var name=els.materialEditName.value.trim(), catId=els.materialEditCat.value, newCat=els.materialEditNewCat.value.trim(), location=els.materialEditLocation.value;
+    if(!name || !location){ els.materialEditMsg.textContent='Udfyld navn og placering.'; return; }
+    if(!catId && !newCat){ els.materialEditMsg.textContent='Vælg en kategori eller skriv en ny kategori.'; return; }
+    function updateMaterial(categoryId, photo){
+      var loan=materialLoan(editingMaterial.note);
+      sb.from('items').update({
+        name:name, category_id:categoryId, photo_path:photo,
+        note:materialNote(location, els.materialEditNote.value.trim(), loan),
+        updated_at:new Date().toISOString()
+      }).eq('id', editingMaterial.id).then(function(res){
+        if(res.error){ els.materialEditMsg.textContent='Kunne ikke gemme ændringen.'; return; }
+        closeMaterialEdit(); showToast('Materiel opdateret.'); refreshMaterial();
+      });
+    }
+    var file=els.materialEditPhoto.files && els.materialEditPhoto.files[0];
+    if(!file){
+      if(newCat) resolveCategory(newCat, function(id){ updateMaterial(id, editingMaterial.photo_path); }, siteCategoryIds.materiel);
+      else updateMaterial(catId, editingMaterial.photo_path);
+      return;
+    }
+    compressPhoto(file, function(err,dataUrl){
+      if(err){ els.materialEditMsg.textContent='Billedet kunne ikke læses.'; return; }
+      if(newCat) resolveCategory(newCat, function(id){ updateMaterial(id, dataUrl); }, siteCategoryIds.materiel);
+      else updateMaterial(catId, dataUrl);
+    });
   });
 
   document.getElementById('f-newcat-toggle').addEventListener('click', function(){
