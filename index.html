@@ -236,20 +236,6 @@
 
 <section id="materiel-view" hidden>
   <div class="material-header"><div><h2>Materiel</h2><p>Opret og hold styr på materiel, der kan lånes ud.</p></div><button class="btn" data-change-site type="button">Skift område</button></div>
-  <form class="material-form" id="material-form">
-    <h3>Opret materiel</h3>
-    <label for="m-name">Materiel navn</label>
-    <input id="m-name" required placeholder="fx Truck, palleløfter eller glasløfter">
-    <select id="m-cat" required><option value="">Vælg kategori</option></select>
-    <input id="m-newcat" placeholder="Ny kategori (valgfri)">
-    <select id="m-location" required><option value="">Vælg placering</option><option>Kaolinvej hallen</option><option>Mineralvej</option><option>Kaolinvej udendørs</option></select>
-    <label for="m-note">Beskrivelse af materiel</label>
-    <input id="m-note" placeholder="Beskriv fx model, størrelse eller stand (valgfri)">
-    <label class="btn" for="m-photo">Vælg billede</label>
-    <input id="m-photo" type="file" accept="image/*" capture="environment">
-    <button class="btn btn-primary" type="submit">Opret materiel</button>
-    <div id="m-msg" role="status"></div>
-  </form>
   <div class="material-list" id="material-list"></div>
 </section>
 
@@ -316,6 +302,28 @@
   </div>
 </div>
 
+<div class="overlay" id="material-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="material-add-title">
+    <div class="modal-head">
+      <h2 id="material-add-title">Nyt materiel</h2>
+      <button class="btn btn-quiet" id="close-material-btn" type="button" aria-label="Luk">×</button>
+    </div>
+    <form class="material-form" id="material-form">
+      <label for="m-name">Materiel navn</label>
+      <input id="m-name" required placeholder="fx Truck, palleløfter eller glasløfter">
+      <select id="m-cat" required><option value="">Vælg kategori</option></select>
+      <input id="m-newcat" placeholder="Ny kategori (valgfri)">
+      <select id="m-location" required><option value="">Vælg placering</option><option>Kaolinvej hallen</option><option>Mineralvej</option><option>Kaolinvej udendørs</option></select>
+      <label for="m-note">Beskrivelse af materiel</label>
+      <input id="m-note" placeholder="Beskriv fx model, størrelse eller stand (valgfri)">
+      <label class="btn" for="m-photo">Vælg billede</label>
+      <input id="m-photo" type="file" accept="image/*" capture="environment">
+      <button class="btn btn-primary" type="submit">Opret materiel</button>
+      <div id="m-msg" role="status"></div>
+    </form>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -370,6 +378,7 @@
     gateError: document.getElementById('gate-error'),
     gateSubmit: document.getElementById('gate-submit'),
     materialForm: document.getElementById('material-form'),
+    materialOverlay: document.getElementById('material-overlay'),
     materialName: document.getElementById('m-name'),
     materialCat: document.getElementById('m-cat'),
     materialNewCat: document.getElementById('m-newcat'),
@@ -380,6 +389,7 @@
     materialMsg: document.getElementById('m-msg'),
   };
   var currentSite = 'overskud';
+  var siteCategoryIds = { overskud:{}, materiel:{} };
 
   function esc(s){
     return String(s==null?'':s).replace(/[&<>"']/g, function(c){
@@ -473,9 +483,12 @@
     fab.setAttribute('aria-label', isMaterial ? 'Tilføj materiel' : 'Tilføj vare');
   }
   function openMaterialForm(){
-    document.getElementById('material-form').scrollIntoView({behavior:'smooth', block:'start'});
-    setTimeout(function(){ els.materialName.focus(); }, 250);
+    els.materialForm.reset();
+    els.materialMsg.textContent = '';
+    els.materialOverlay.hidden = false;
+    setTimeout(function(){ els.materialName.focus(); }, 30);
   }
+  function closeMaterialForm(){ els.materialOverlay.hidden = true; }
   function changeSite(){
     try{ localStorage.removeItem('tl_site'); }catch(e){}
     document.body.classList.add('locked');
@@ -678,8 +691,10 @@
   function refreshMaterial(){
     if(!sb) return;
     Promise.all([sb.from('categories').select('*').order('name'), sb.from('items').select('*')]).then(function(res){
-      if(!res[0].error) state.categories = res[0].data || [];
       var items = !res[1].error ? (res[1].data || []).filter(function(it){ return isMateriel(it.note) && Number(it.quantity) > 0; }) : [];
+      siteCategoryIds.materiel = {};
+      items.forEach(function(it){ if(it.category_id) siteCategoryIds.materiel[it.category_id] = true; });
+      if(!res[0].error) state.categories = (res[0].data || []).filter(function(category){ return siteCategoryIds.materiel[category.id]; });
       populateMaterialCategories();
       renderMaterial(items);
     });
@@ -712,15 +727,17 @@
       sb.from('items').select('*')
     ]).then(function(res){
       var catRes = res[0], itemRes = res[1];
-      if(!catRes.error) state.categories = catRes.data || [];
       if(!itemRes.error){
         state.items = (itemRes.data || []).filter(function(it){ return Number(it.quantity) > 0 && !isMateriel(it.note); });
+        siteCategoryIds.overskud = {};
+        state.items.forEach(function(it){ if(it.category_id) siteCategoryIds.overskud[it.category_id] = true; });
         (itemRes.data || []).filter(function(it){ return Number(it.quantity) <= 0; }).forEach(function(it){
           sb.from('items')['delete']().eq('id', it.id).then(function(deleteRes){
             if(deleteRes.error) showToast('Kunne ikke slette en tom vare.');
           });
         });
       }
+      if(!catRes.error) state.categories = (catRes.data || []).filter(function(category){ return siteCategoryIds.overskud[category.id]; });
 
       state.activeCat = 'all';
       populateCatSelect();
@@ -789,9 +806,10 @@
     }
     return prev[b.length];
   }
-  function findSimilarCategory(name){
+  function findSimilarCategory(name, allowedIds){
     var normalized = normalizedCategoryName(name), best = null, bestScore = Infinity;
     state.categories.forEach(function(category){
+      if(allowedIds && !allowedIds[category.id]) return;
       var candidate = normalizedCategoryName(category.name);
       if(!normalized || !candidate) return;
       var distance = categoryDistance(normalized, candidate);
@@ -800,8 +818,8 @@
     });
     return best;
   }
-  function resolveCategory(name, cb){
-    var category = findSimilarCategory(name);
+  function resolveCategory(name, cb, allowedIds){
+    var category = findSimilarCategory(name, allowedIds);
     if(category){
       if(normalizedCategoryName(category.name) !== normalizedCategoryName(name)){
         showToast('Bruger eksisterende kategori: '+category.name);
@@ -844,6 +862,8 @@
   document.getElementById('close-add-btn').addEventListener('click', closeAdd);
   document.getElementById('cancel-add-btn').addEventListener('click', closeAdd);
   els.overlay.addEventListener('click', function(e){ if(e.target===els.overlay) closeAdd(); });
+  document.getElementById('close-material-btn').addEventListener('click', closeMaterialForm);
+  els.materialOverlay.addEventListener('click', function(e){ if(e.target===els.materialOverlay) closeMaterialForm(); });
 
   els.materialForm.addEventListener('submit', function(e){
     e.preventDefault();
@@ -854,14 +874,14 @@
       function insert(photo){
         sb.from('items').insert({name:name, category_id:categoryId, quantity:1, unit:'stk', note:materialNote(location, els.materialNote.value.trim(), null), photo_path:photo}).then(function(res){
           if(res.error){ els.materialMsg.textContent='Kunne ikke gemme materiellet.'; return; }
-          els.materialForm.reset(); els.materialMsg.textContent='Materiel oprettet.'; refreshMaterial();
+          els.materialForm.reset(); closeMaterialForm(); showToast('Materiel oprettet.'); refreshMaterial();
         });
       }
       if(!file){ insert(null); return; }
       compressPhoto(file, function(err,dataUrl){ if(err){ els.materialMsg.textContent='Billedet kunne ikke læses.'; return; } insert(dataUrl); });
     }
     if(newCat){
-      resolveCategory(newCat, function(id){ saveMaterial(id); });
+      resolveCategory(newCat, function(id){ saveMaterial(id); }, siteCategoryIds.materiel);
     } else saveMaterial(catId);
   });
 
@@ -919,7 +939,7 @@
         closeAdd(); showToast('Tilføjet: '+name); refreshAll();
       });
     }
-    if(newCategory) resolveCategory(newCategory, saveItem);
+    if(newCategory) resolveCategory(newCategory, saveItem, siteCategoryIds.overskud);
     else saveItem(category_id);
   });
 
