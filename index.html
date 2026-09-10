@@ -693,12 +693,23 @@
     );
   }
 
-  function render(){
+  function matchesSearch(it){
     var term = state.search.trim().toLowerCase();
-    var filtered = state.items.filter(function(it){
-      if(term && it.name.toLowerCase().indexOf(term) === -1) return false;
-      return true;
+    if(!term) return true;
+    var fields = [
+      it.name, catName(it.category_id), it.note, it.unit,
+      materialLocation(it.note), materialDescription(it.note)
+    ];
+    var loan = materialLoan(it.note);
+    if(loan) fields.push(loan.target, loan.foreman);
+    materialHistory(it.note).forEach(function(entry){
+      fields.push(entry.target, entry.foreman, entry.loanedAt, entry.returnedAt);
     });
+    return fields.join(' ').toLowerCase().indexOf(term) !== -1;
+  }
+
+  function render(){
+    var filtered = state.items.filter(matchesSearch);
     els.empty.hidden = state.items.length > 0;
     if(filtered.length === 0){
       els.content.innerHTML = state.items.length > 0 ? '<p style="color:var(--ink-soft); margin-top:24px;">Ingen varer matcher søgningen.</p>' : '';
@@ -776,8 +787,12 @@
     });
   }
   function renderMaterial(items){
-    if(!items.length){ els.materialList.innerHTML = '<p>Der er ikke oprettet materiel endnu.</p>'; return; }
-    els.materialList.innerHTML = items.sort(function(a,b){ return a.name.localeCompare(b.name,'da'); }).map(function(it){
+    var filtered = items.filter(matchesSearch);
+    if(!filtered.length){
+      els.materialList.innerHTML = items.length ? '<p>Ingen materiel matcher søgningen.</p>' : '<p>Der er ikke oprettet materiel endnu.</p>';
+      return;
+    }
+    els.materialList.innerHTML = filtered.sort(function(a,b){ return a.name.localeCompare(b.name,'da'); }).map(function(it){
       var loan = materialLoan(it.note), url = photoUrl(it.photo_path);
       var photo = url ? '<img src="'+esc(url)+'" alt="">' : '<div class="material-photo-placeholder">Intet billede</div>';
       var action = loan
@@ -787,7 +802,7 @@
     }).join('');
     els.materialList.querySelectorAll('.material-loan-btn').forEach(function(btn){
       btn.addEventListener('click', function(){ var target=prompt('Adresse eller sagsnummer:'); if(!target) return; var foreman=prompt('Ansvarlig formand:'); if(!foreman) return;
-        var it=items.find(function(x){return x.id===btn.getAttribute('data-id');});
+        var it=filtered.find(function(x){return x.id===btn.getAttribute('data-id');});
         var history=materialHistory(it.note);
         history.push({target:target.trim(), foreman:foreman.trim(), loanedAt:new Date().toISOString(), returnedAt:null});
         sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), {target:target.trim(), foreman:foreman.trim()}, history), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere udlån.');return;} showToast('Materiellet er lånt ud.'); refreshMaterial(); });
@@ -795,12 +810,12 @@
     });
     els.materialList.querySelectorAll('.material-edit-btn').forEach(function(btn){
       btn.addEventListener('click', function(){
-        var it=items.find(function(x){ return x.id===btn.getAttribute('data-id'); });
+        var it=filtered.find(function(x){ return x.id===btn.getAttribute('data-id'); });
         if(it) openMaterialEdit(it);
       });
     });
     els.materialList.querySelectorAll('.material-return').forEach(function(btn){
-      btn.addEventListener('click', function(){ var it=items.find(function(x){return x.id===btn.getAttribute('data-id');}); var history=materialHistory(it.note); for(var i=history.length-1;i>=0;i--){ if(!history[i].returnedAt){ history[i].returnedAt=new Date().toISOString(); break; } } sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), null, history), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere aflevering.');return;} showToast('Materiellet er afleveret.'); refreshMaterial(); }); });
+      btn.addEventListener('click', function(){ var it=filtered.find(function(x){return x.id===btn.getAttribute('data-id');}); var history=materialHistory(it.note); for(var i=history.length-1;i>=0;i--){ if(!history[i].returnedAt){ history[i].returnedAt=new Date().toISOString(); break; } } sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), null, history), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere aflevering.');return;} showToast('Materiellet er afleveret.'); refreshMaterial(); }); });
     });
   }
 
@@ -1070,7 +1085,10 @@
     else saveItem(category_id);
   });
 
-  els.search.addEventListener('input', function(){ state.search = els.search.value; render(); });
+  els.search.addEventListener('input', function(){
+    state.search = els.search.value;
+    if(currentSite === 'materiel') refreshMaterial(); else render();
+  });
 
   /* ---------------- boot ---------------- */
 
