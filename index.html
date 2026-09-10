@@ -78,6 +78,11 @@
   .material-photo-placeholder{display:grid; place-items:center; color:var(--ink-faint);}
   .material-loan{color:var(--low); font-weight:700;}
   .material-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .material-history{grid-column:1 / -1; border-top:1px solid var(--line); padding-top:8px;}
+  .material-history summary{cursor:pointer; color:var(--accent-strong); font-weight:700; font-size:.85rem;}
+  .history-row{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:.78rem;}
+  .history-row:last-child{border-bottom:0;}
+  .history-label{color:var(--ink-soft); font-size:.7rem;}
   @media(max-width:600px){.material-card{grid-template-columns:80px 1fr;}.material-card .btn{grid-column:2;}.material-card img,.material-photo-placeholder{width:80px;height:70px;}}
 
   body.locked > *:not(#gate){display:none;}
@@ -598,8 +603,25 @@
     var match = String(note||'').match(/\[Udlån: adresse\/sag=([^;]+); formand=([^\]]+)\]/);
     return match ? { target:match[1], foreman:match[2] } : null;
   }
-  function materialNote(location, description, loan){
-    return '[Materiel][Placering: '+location+']'+(description ? ' [Beskrivelse: '+description+']' : '')+(loan ? ' [Udlån: adresse/sag='+loan.target+'; formand='+loan.foreman+']' : '');
+  function materialHistory(note){
+    var match = String(note||'').match(/\[Historik: ([^\]]+)\]/);
+    if(!match) return [];
+    try{ return JSON.parse(decodeURIComponent(match[1])); }catch(e){ return []; }
+  }
+  function materialNote(location, description, loan, history){
+    var historyText = history && history.length ? ' [Historik: '+encodeURIComponent(JSON.stringify(history.slice(-10)))+']' : '';
+    return '[Materiel][Placering: '+location+']'+(description ? ' [Beskrivelse: '+description+']' : '')+(loan ? ' [Udlån: adresse/sag='+loan.target+'; formand='+loan.foreman+']' : '')+historyText;
+  }
+  function formatDate(value){
+    if(!value) return 'Ikke afleveret';
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? value : date.toLocaleString('da-DK',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  }
+  function materialHistoryHtml(history){
+    if(!history.length) return '';
+    return '<details class="material-history"><summary>Seneste udlån ('+history.length+')</summary>'+history.slice().reverse().map(function(entry){
+      return '<div class="history-row"><div><div class="history-label">Adresse/sagsnr.</div>'+esc(entry.target)+'</div><div><div class="history-label">Udlånt</div>'+esc(formatDate(entry.loanedAt))+'</div><div><div class="history-label">Afleveret</div>'+esc(formatDate(entry.returnedAt))+'<br><span class="history-label">Formand: '+esc(entry.foreman)+'</span></div></div>';
+    }).join('')+'</details>';
   }
   function materialDescription(note){
     var match = String(note||'').match(/\[Beskrivelse: ([^\]]+)\]/);
@@ -761,12 +783,14 @@
       var action = loan
         ? '<div><div class="material-loan">UDLÅN</div><div>'+esc(loan.target)+'</div><div>Ansvarlig: '+esc(loan.foreman)+'</div><button class="btn material-return" data-id="'+it.id+'">Registrér aflevering</button></div>'
         : '<button class="btn btn-primary material-loan-btn" data-id="'+it.id+'">Lån ud</button>';
-      return '<article class="material-card">'+photo+'<div><h3>'+esc(it.name)+'</h3><div>'+esc(catName(it.category_id))+'</div><div>Placering: '+esc(materialLocation(it.note))+'</div>'+(materialDescription(it.note)?'<div>'+esc(materialDescription(it.note))+'</div>':'')+'<div class="material-actions"><button class="btn material-edit-btn" data-id="'+it.id+'">Rediger</button>'+action+'</div></div></article>';
+      return '<article class="material-card">'+photo+'<div><h3>'+esc(it.name)+'</h3><div>'+esc(catName(it.category_id))+'</div><div>Placering: '+esc(materialLocation(it.note))+'</div>'+(materialDescription(it.note)?'<div>'+esc(materialDescription(it.note))+'</div>':'')+'<div class="material-actions"><button class="btn material-edit-btn" data-id="'+it.id+'">Rediger</button>'+action+'</div></div>'+materialHistoryHtml(materialHistory(it.note))+'</article>';
     }).join('');
     els.materialList.querySelectorAll('.material-loan-btn').forEach(function(btn){
       btn.addEventListener('click', function(){ var target=prompt('Adresse eller sagsnummer:'); if(!target) return; var foreman=prompt('Ansvarlig formand:'); if(!foreman) return;
         var it=items.find(function(x){return x.id===btn.getAttribute('data-id');});
-        sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), {target:target.trim(), foreman:foreman.trim()}), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere udlån.');return;} showToast('Materiellet er lånt ud.'); refreshMaterial(); });
+        var history=materialHistory(it.note);
+        history.push({target:target.trim(), foreman:foreman.trim(), loanedAt:new Date().toISOString(), returnedAt:null});
+        sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), {target:target.trim(), foreman:foreman.trim()}, history), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere udlån.');return;} showToast('Materiellet er lånt ud.'); refreshMaterial(); });
       });
     });
     els.materialList.querySelectorAll('.material-edit-btn').forEach(function(btn){
@@ -776,7 +800,7 @@
       });
     });
     els.materialList.querySelectorAll('.material-return').forEach(function(btn){
-      btn.addEventListener('click', function(){ var it=items.find(function(x){return x.id===btn.getAttribute('data-id');}); sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), null), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere aflevering.');return;} showToast('Materiellet er afleveret.'); refreshMaterial(); }); });
+      btn.addEventListener('click', function(){ var it=items.find(function(x){return x.id===btn.getAttribute('data-id');}); var history=materialHistory(it.note); for(var i=history.length-1;i>=0;i--){ if(!history[i].returnedAt){ history[i].returnedAt=new Date().toISOString(); break; } } sb.from('items').update({note:materialNote(materialLocation(it.note), materialDescription(it.note), null, history), updated_at:new Date().toISOString()}).eq('id',it.id).then(function(res){ if(res.error){showToast('Kunne ikke registrere aflevering.');return;} showToast('Materiellet er afleveret.'); refreshMaterial(); }); });
     });
   }
 
@@ -968,7 +992,7 @@
       var loan=materialLoan(editingMaterial.note);
       sb.from('items').update({
         name:name, category_id:categoryId, photo_path:photo,
-        note:materialNote(location, els.materialEditNote.value.trim(), loan),
+        note:materialNote(location, els.materialEditNote.value.trim(), loan, materialHistory(editingMaterial.note)),
         updated_at:new Date().toISOString()
       }).eq('id', editingMaterial.id).then(function(res){
         if(res.error){ els.materialEditMsg.textContent='Kunne ikke gemme ændringen.'; return; }
