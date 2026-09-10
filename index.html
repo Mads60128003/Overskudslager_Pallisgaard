@@ -589,7 +589,7 @@
     return match ? match[1] : '';
   }
   function itemNote(note){
-    return String(note||'').replace(/^\[Placering: [^\]]+\]\s*/, '');
+    return String(note||'').replace(/^\[Placering: [^\]]+\]\s*/, '').replace(/\s*\[Plukhistorik: [^\]]+\]/, '');
   }
   function storedNote(location, note){
     return '[Placering: '+location+']'+(note ? ' '+note : '');
@@ -622,6 +622,21 @@
       return '<div class="history-row"><div><div class="history-label">Adresse/sagsnr.</div>'+esc(entry.target)+'</div><div><div class="history-label">Udlånt</div>'+esc(formatDate(entry.loanedAt))+'</div><div><div class="history-label">Afleveret</div>'+esc(formatDate(entry.returnedAt))+'<br><span class="history-label">Formand: '+esc(entry.foreman)+'</span></div></div>';
     }).join('');
     return '<details class="material-history"><summary>Seneste udlån ('+history.length+')</summary>'+(rows || '<p>Ingen udlån registreret endnu.</p>')+'</details>';
+  }
+  function itemHistory(note){
+    var match = String(note||'').match(/\[Plukhistorik: ([^\]]+)\]/);
+    if(!match) return [];
+    try{ return JSON.parse(decodeURIComponent(match[1])); }catch(e){ return []; }
+  }
+  function itemNoteWithHistory(location, note, history){
+    var historyText = history && history.length ? ' [Plukhistorik: '+encodeURIComponent(JSON.stringify(history))+']' : '';
+    return storedNote(location, note)+historyText;
+  }
+  function itemHistoryHtml(history){
+    var rows = history.slice().reverse().map(function(entry){
+      return '<div class="history-row"><div><div class="history-label">Sagsnr.</div>'+esc(entry.caseNumber)+'</div><div><div class="history-label">Plukket</div>'+esc(formatDate(entry.pickedAt))+'<br><span class="history-label">Antal: '+esc(entry.quantity)+'</span></div><div><div class="history-label">Formand</div>'+esc(entry.foreman)+'</div></div>';
+    }).join('');
+    return '<details class="material-history"><summary>Plukhistorik ('+history.length+')</summary>'+(rows || '<p>Ingen pluk registreret endnu.</p>')+'</details>';
   }
   function materialDescription(note){
     var match = String(note||'').match(/\[Beskrivelse: ([^\]]+)\]/);
@@ -689,6 +704,7 @@
             '<svg viewBox="0 0 20 20" fill="none"><path d="M13.5 3.5l3 3L6 17H3v-3L13.5 3.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button></div>'+
         '</div>'+
         '<div class="card-body">'+body+'</div>'+
+        itemHistoryHtml(itemHistory(it.note))+
       '</div>'
     );
   }
@@ -704,6 +720,9 @@
     if(loan) fields.push(loan.target, loan.foreman);
     materialHistory(it.note).forEach(function(entry){
       fields.push(entry.target, entry.foreman, entry.loanedAt, entry.returnedAt);
+    });
+    itemHistory(it.note).forEach(function(entry){
+      fields.push(entry.caseNumber, entry.foreman, entry.pickedAt, entry.quantity);
     });
     return fields.join(' ').toLowerCase().indexOf(term) !== -1;
   }
@@ -847,10 +866,16 @@
   function pickItem(it, amount){
     if(!sb) return;
     amount = Math.max(1, Math.min(amount, it.quantity));
+    var caseNumber = prompt('Sagsnummer:');
+    if(!caseNumber || !caseNumber.trim()) return;
+    var foreman = prompt('Ansvarlig formand:');
+    if(!foreman || !foreman.trim()) return;
     var newQty = Math.max(0, it.quantity - amount);
+    var history = itemHistory(it.note);
+    history.push({caseNumber:caseNumber.trim(), foreman:foreman.trim(), quantity:amount, pickedAt:new Date().toISOString()});
     var operation = newQty === 0
       ? sb.from('items')['delete']().eq('id', it.id)
-      : sb.from('items').update({ quantity:newQty, updated_at:new Date().toISOString() }).eq('id', it.id);
+      : sb.from('items').update({ quantity:newQty, note:itemNoteWithHistory(locationName(it.note), itemNote(it.note), history), updated_at:new Date().toISOString() }).eq('id', it.id);
     operation.then(function(res){
       if(res.error){ showToast('Kunne ikke opdatere lageret.'); return; }
       showToast(newQty === 0 ? 'Varen er udsolgt og slettet.' : 'Plukkede '+amount+' '+(it.unit||'stk')+' – '+it.name);
@@ -866,7 +891,7 @@
     if(data.quantity <= 0){ deleteItem(it); return; }
     sb.from('items').update({
       name:data.name, category_id:data.category_id, quantity:data.quantity, unit:data.unit,
-      note:storedNote(data.location, data.note), updated_at:new Date().toISOString()
+      note:itemNoteWithHistory(data.location, data.note, itemHistory(it.note)), updated_at:new Date().toISOString()
     }).eq('id', it.id).then(function(res){
       if(res.error){ showToast('Kunne ikke gemme ændringen.'); return; }
       state.editingId = null; showToast('Vare opdateret.'); refreshAll();
