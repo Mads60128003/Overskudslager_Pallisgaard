@@ -26,6 +26,7 @@
       --accent:#E2A23A; --accent-strong:#F0B658; --accent-ink:#241800;
       --good:#69B384; --good-bg:#22301F; --low:#E08876; --low-bg:#3A231D;
       --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 20px -10px rgba(0,0,0,.6);
+      color-scheme:dark;
     }
   }
   :root[data-theme="dark"]{
@@ -34,6 +35,7 @@
     --accent:#E2A23A; --accent-strong:#F0B658; --accent-ink:#241800;
     --good:#69B384; --good-bg:#22301F; --low:#E08876; --low-bg:#3A231D;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 20px -10px rgba(0,0,0,.6);
+    color-scheme:dark;
   }
   *{box-sizing:border-box;}
   html,body{background:var(--paper);}
@@ -44,6 +46,7 @@
   h1,h2,h3{font-family:var(--font-display); text-transform:uppercase; letter-spacing:.02em; text-wrap:balance; margin:0;}
   .tabular{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
   button{font-family:inherit;} input,select{font-family:inherit; color:inherit;} a{color:inherit;}
+  option{background:var(--panel); color:var(--ink);}
 
   /* Gate */
   #gate{
@@ -270,6 +273,11 @@
     <div class="field"><label for="f-name">Varenavn</label>
       <input id="f-name" type="text" placeholder="fx Indvendig dør, hvid, 80 cm" autocomplete="off"></div>
     <div class="field"><label for="f-cat">Kategori</label><select id="f-cat"></select></div>
+    <div class="cat-add-inline" id="cat-add-inline" hidden>
+      <input id="f-newcat" type="text" placeholder="Navn på ny kategori">
+      <button class="btn" id="f-newcat-save" type="button">Tilføj</button>
+    </div>
+    <button class="btn btn-quiet" id="f-newcat-toggle" type="button" style="align-self:flex-start; padding:4px 0; font-size:.78rem; color:var(--accent);">+ Ny kategori</button>
     <div class="field"><label for="f-location">Placering</label>
       <select id="f-location">
         <option value="">Vælg placering</option>
@@ -278,11 +286,6 @@
         <option>Kaolinvej udendørs</option>
       </select>
     </div>
-    <div class="cat-add-inline" id="cat-add-inline" hidden>
-      <input id="f-newcat" type="text" placeholder="Navn på ny kategori">
-      <button class="btn" id="f-newcat-save">Tilføj</button>
-    </div>
-    <button class="btn btn-quiet" id="f-newcat-toggle" style="align-self:flex-start; padding:4px 0; font-size:.78rem; color:var(--accent);">+ Ny kategori</button>
     <div class="row2">
       <div class="field"><label for="f-qty">Antal</label><input id="f-qty" type="number" min="0" step="1" value="1" inputmode="numeric"></div>
       <div class="field"><label for="f-unit">Enhed</label>
@@ -971,7 +974,7 @@
   function populateCatSelect(){
     if(state.categories.length===0){ els.fCat.innerHTML = '<option value="">Opret en kategori først</option>'; return; }
     var prev = els.fCat.value;
-    els.fCat.innerHTML = state.categories.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
+    els.fCat.innerHTML = '<option value="">Vælg kategori</option>'+state.categories.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
     if(prev && state.categories.some(function(c){return c.id===prev;})) els.fCat.value = prev;
   }
   function openAdd(){ resetForm(); els.overlay.hidden=false; setTimeout(function(){ els.fName.focus(); }, 30); }
@@ -1063,7 +1066,12 @@
   });
   document.getElementById('f-newcat-save').addEventListener('click', function(){
     var name = els.fNewcat.value.trim(); if(!name) return;
-    addCategory(name, function(id){ els.catAddInline.hidden=true; els.fNewcat.value=''; setTimeout(function(){ els.fCat.value=id; }, 150); });
+    addCategory(name, function(id){
+      els.catAddInline.hidden = false;
+      els.fCat.value = id;
+      els.fNewcat.value = '';
+      els.fCat.focus();
+    });
   });
 
   els.fPhoto.addEventListener('change', function(){
