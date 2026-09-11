@@ -910,7 +910,12 @@
     if(!sb || !name) return;
     sb.from('categories').insert({ name:name }).select().then(function(res){
       if(res.error || !res.data || !res.data[0]){ showToast('Kunne ikke oprette kategorien.'); return; }
-      refreshAll();
+      var created = res.data[0];
+      if(!state.categories.some(function(category){ return category.id === created.id; })){
+        state.categories.push(created);
+        state.categories.sort(function(a,b){ return a.name.localeCompare(b.name,'da'); });
+      }
+      if(currentSite === 'materiel') populateMaterialCategories(); else populateCatSelect();
       if(cb) cb(res.data[0].id);
     });
   }
