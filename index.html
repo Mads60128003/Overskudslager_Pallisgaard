@@ -129,6 +129,9 @@
     overflow:hidden; display:flex; flex-direction:column; position:relative; }
   .card-photo{aspect-ratio:4/3; background:var(--panel-2); position:relative; overflow:hidden;}
   .card-photo img{width:100%; height:100%; object-fit:cover; display:block;}
+  .card-photo .gallery{width:100%; height:100%; position:relative;}
+  .card-photo .gallery-nav{position:absolute; inset:auto 6px 6px; display:flex; justify-content:space-between; pointer-events:none;}
+  .card-photo .gallery-nav button{pointer-events:auto; width:28px; height:28px; border:0; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; cursor:pointer;}
   .card-photo .placeholder{width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:var(--ink-faint);}
   .card-photo .placeholder svg{width:38px; height:38px;}
   .card-tools{position:absolute; top:6px; right:6px; display:flex; gap:4px;}
@@ -299,7 +302,7 @@
         <div class="photo-preview" id="photo-preview">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.5"/></svg>
         </div>
-        <label class="btn file-btn">Tag / vælg billede<input type="file" id="f-photo" accept="image/*" capture="environment"></label>
+        <label class="btn file-btn">Tag / vælg billeder<input type="file" id="f-photo" accept="image/*" capture="environment" multiple></label>
       </div>
     </div>
     <div class="field"><label for="f-note">Note (valgfri)</label><input id="f-note" type="text" placeholder="fx fra nedrivning på Kildevej 12"></div>
@@ -387,7 +390,7 @@
     : null;
 
   var state = { categories:[], items:[], activeCat:"all", search:"", editingId:null, confirmDeleteId:null };
-  var pendingPhotoPath = null;
+  var pendingPhotoPaths = [];
   var pollTimer = null;
 
   var els = {
@@ -456,6 +459,22 @@
     if(!path || !sb) return null;
     if(path.indexOf('data:image/') === 0) return path;
     return sb.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+  function photoPaths(value){
+    if(!value) return [];
+    try{
+      var parsed = JSON.parse(value);
+      if(Array.isArray(parsed)) return parsed;
+    }catch(e){}
+    return [value];
+  }
+  function galleryHtml(value, className){
+    var paths = photoPaths(value), first = paths[0], url = photoUrl(first);
+    if(!url) return placeholderIcon();
+    var controls = paths.length > 1
+      ? '<div class="gallery-nav"><button type="button" class="gallery-prev" aria-label="Forrige billede">‹</button><button type="button" class="gallery-next" aria-label="Næste billede">›</button></div>'
+      : '';
+    return '<div class="gallery" data-gallery-index="0" data-gallery-paths="'+esc(JSON.stringify(paths))+'"><img class="'+(className||'')+'" src="'+esc(url)+'" alt="">'+controls+'</div>';
   }
 
   function compressPhoto(file, cb){
@@ -662,8 +681,7 @@
 
   function itemCardHtml(it){
     var low = it.quantity <= 0;
-    var url = photoUrl(it.photo_path);
-    var photoBlock = url ? '<img src="'+esc(url)+'" alt="">' : placeholderIcon();
+    var photoBlock = galleryHtml(it.photo_path);
     var editing = state.editingId === it.id;
     var confirming = state.confirmDeleteId === it.id;
     var body;
@@ -770,6 +788,15 @@
         plus.addEventListener('click', function(){ amt.value = Math.min(it.quantity, (parseInt(amt.value,10)||1) + 1); });
       }
       if(pickBtn) pickBtn.addEventListener('click', function(){ pickItem(it, parseInt(amt.value,10)||1); });
+      card.querySelectorAll('.gallery-prev,.gallery-next').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var gallery = card.querySelector('.gallery');
+          var paths = JSON.parse(gallery.getAttribute('data-gallery-paths')), index = parseInt(gallery.getAttribute('data-gallery-index'),10) || 0;
+          index = (index + (btn.classList.contains('gallery-next') ? 1 : paths.length - 1)) % paths.length;
+          gallery.setAttribute('data-gallery-index', index);
+          gallery.querySelector('img').src = photoUrl(paths[index]);
+        });
+      });
       var edSave = card.querySelector('.ed-save');
       if(edSave) edSave.addEventListener('click', function(){
         var form = card.querySelector('.edit-form');
@@ -967,7 +994,7 @@
 
   function resetForm(){
     els.fName.value=''; els.fQty.value='1'; els.fUnit.value='stk'; els.fNote.value=''; els.fPhoto.value=''; els.fLocation.value='';
-    els.formMsg.textContent=''; pendingPhotoPath=null;
+    els.formMsg.textContent=''; pendingPhotoPaths=[];
     pendingNewCategory = null;
     els.photoPreview.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.5"/></svg>';
     els.catAddInline.hidden = true; els.fNewcat.value='';
@@ -1084,26 +1111,26 @@
   });
 
   els.fPhoto.addEventListener('change', function(){
-    var file = els.fPhoto.files && els.fPhoto.files[0];
-    if(!file || !sb) return;
-    els.photoPreview.innerHTML = '<span style="font-size:.65rem;color:var(--ink-faint);">Uploader…</span>';
-    var id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+Math.random());
-    var path = id + '.jpg';
-    sb.storage.from(PHOTO_BUCKET).upload(path, file, { upsert:false }).then(function(res){
-      if(!res.error){
-        pendingPhotoPath = path;
-        els.photoPreview.innerHTML = '<img src="'+esc(photoUrl(path))+'" alt="">';
-        return;
-      }
+    var files = Array.prototype.slice.call(els.fPhoto.files || []).slice(0,5);
+    if(!files.length) return;
+    els.photoPreview.innerHTML = '<span style="font-size:.65rem;color:var(--ink-faint);">Behandler '+files.length+' billede(r)…</span>';
+    pendingPhotoPaths = [];
+    var done = 0, failed = false;
+    files.forEach(function(file){
       compressPhoto(file, function(err, dataUrl){
+        if(failed) return;
         if(err){
-          showToast('iPhone-billedet kunne ikke læses. Prøv et nyt billede.');
-          els.photoPreview.innerHTML='<span style="font-size:.6rem;color:var(--low);">Format ikke understøttet</span>';
+          failed = true;
+          pendingPhotoPaths = [];
+          els.photoPreview.innerHTML='<span style="font-size:.6rem;color:var(--low);">Et billede kunne ikke læses</span>';
           return;
         }
-        pendingPhotoPath = dataUrl;
-        els.photoPreview.innerHTML = '<img src="'+esc(dataUrl)+'" alt="">';
-        showToast('Billedet er klar til at blive gemt.');
+        pendingPhotoPaths.push(dataUrl);
+        done++;
+        if(done === files.length){
+          els.photoPreview.innerHTML = '<img src="'+esc(pendingPhotoPaths[0])+'" alt=""><span style="font-size:.72rem;color:var(--ink-soft);">'+done+' billeder valgt</span>';
+          showToast(done+' billeder er klar til at blive gemt.');
+        }
       });
     });
   });
@@ -1122,7 +1149,7 @@
     if(!sb){ els.formMsg.textContent='Forbindelsen til lagersystemet mangler at blive sat op.'; return; }
     function saveItem(resolvedCategoryId){
       sb.from('items').insert({
-        name:name, category_id:resolvedCategoryId, quantity:qty, unit:unit, note:storedNote(location, note), photo_path:pendingPhotoPath
+        name:name, category_id:resolvedCategoryId, quantity:qty, unit:unit, note:storedNote(location, note), photo_path:pendingPhotoPaths.length ? JSON.stringify(pendingPhotoPaths) : null
       }).then(function(res){
         if(res.error){ els.formMsg.textContent='Kunne ikke gemme varen. Prøv igen.'; return; }
         closeAdd(); showToast('Tilføjet: '+name); refreshAll();
