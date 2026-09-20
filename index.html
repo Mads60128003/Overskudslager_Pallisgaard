@@ -437,6 +437,7 @@
   var currentSite = 'overskud';
   var siteCategoryIds = { overskud:{}, materiel:{} };
   var editingMaterial = null;
+  var pendingNewCategory = null;
 
   function esc(s){
     return String(s==null?'':s).replace(/[&<>"']/g, function(c){
@@ -967,15 +968,22 @@
   function resetForm(){
     els.fName.value=''; els.fQty.value='1'; els.fUnit.value='stk'; els.fNote.value=''; els.fPhoto.value=''; els.fLocation.value='';
     els.formMsg.textContent=''; pendingPhotoPath=null;
+    pendingNewCategory = null;
     els.photoPreview.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.5"/></svg>';
     els.catAddInline.hidden = true; els.fNewcat.value='';
     populateCatSelect();
   }
   function populateCatSelect(){
-    if(state.categories.length===0){ els.fCat.innerHTML = '<option value="">Opret en kategori først</option>'; return; }
+    if(state.categories.length===0 && !pendingNewCategory){ els.fCat.innerHTML = '<option value="">Opret en kategori først</option>'; return; }
     var prev = els.fCat.value;
-    els.fCat.innerHTML = '<option value="">Vælg kategori</option>'+state.categories.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
+    var categories = state.categories.slice();
+    if(pendingNewCategory && !categories.some(function(c){ return c.id === pendingNewCategory.id; })){
+      categories.push(pendingNewCategory);
+    }
+    categories.sort(function(a,b){ return a.name.localeCompare(b.name,'da'); });
+    els.fCat.innerHTML = '<option value="">Vælg kategori</option>'+categories.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
     if(prev && state.categories.some(function(c){return c.id===prev;})) els.fCat.value = prev;
+    if(pendingNewCategory) els.fCat.value = pendingNewCategory.id;
   }
   function openAdd(){ resetForm(); els.overlay.hidden=false; setTimeout(function(){ els.fName.focus(); }, 30); }
   function closeAdd(){ els.overlay.hidden = true; }
@@ -1067,6 +1075,7 @@
   document.getElementById('f-newcat-save').addEventListener('click', function(){
     var name = els.fNewcat.value.trim(); if(!name) return;
     addCategory(name, function(id){
+      pendingNewCategory = { id:id, name:name };
       els.catAddInline.hidden = false;
       els.fCat.value = id;
       els.fNewcat.value = '';
