@@ -513,6 +513,12 @@
     els.gateLogin.hidden = true;
     els.siteChoice.hidden = false;
     els.gate.hidden = false;
+    document.body.classList.add('locked');
+    document.getElementById('overskud-header').hidden = true;
+    document.getElementById('overskud-main').hidden = true;
+    document.getElementById('materiel-view').hidden = true;
+    document.getElementById('fab-add').hidden = true;
+    backBtn.disabled = true;
   }
   function showOverskud(){
     currentSite = 'overskud';
@@ -525,6 +531,7 @@
     document.getElementById('site-title').textContent = 'Overskudsmaterialer';
     document.getElementById('site-subtitle').textContent = 'Returmaterialer på lager';
     updateAddControls(false);
+    updateBackButton();
     boot();
   }
   function showMateriel(){
@@ -538,6 +545,7 @@
     document.getElementById('site-title').textContent = 'Materiel';
     document.getElementById('site-subtitle').textContent = 'Materiel til udlån';
     updateAddControls(true);
+    updateBackButton();
     refreshMaterial();
   }
   function updateAddControls(isMaterial){
@@ -1022,8 +1030,10 @@
     if(currentSite === 'materiel') openMaterialForm(); else openAdd();
   });
   var backBtn = document.getElementById('back-btn');
-  function updateBackButton(){ backBtn.disabled = history.length <= 1; }
-  backBtn.addEventListener('click', function(){ if(history.length > 1) history.back(); });
+  function updateBackButton(){ backBtn.disabled = document.body.classList.contains('locked'); }
+  backBtn.addEventListener('click', function(){
+    if(!backBtn.disabled) showSiteChoice();
+  });
   updateBackButton();
   window.addEventListener('pageshow', updateBackButton);
   document.getElementById('close-add-btn').addEventListener('click', closeAdd);
