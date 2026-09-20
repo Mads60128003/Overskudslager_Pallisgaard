@@ -1,11 +1,12 @@
--- Run this once in Supabase SQL Editor after enabling Phone Auth and SMS.
+-- Run this once in Supabase SQL Editor after enabling Email Auth.
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  phone text,
+  email text,
   role text not null default 'user' check (role in ('admin', 'user')),
   created_at timestamptz not null default now()
 );
 
+alter table public.profiles add column if not exists email text;
 alter table public.profiles enable row level security;
 alter table public.items enable row level security;
 alter table public.categories enable row level security;
@@ -18,7 +19,7 @@ create or replace function public.create_profile()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, phone) values (new.id, new.phone);
+  insert into public.profiles (id, email) values (new.id, new.email);
   return new;
 end;
 $$;
@@ -67,5 +68,5 @@ create trigger restrict_user_item_updates
   before update on public.items
   for each row execute procedure public.restrict_user_item_updates();
 
--- After the first account is verified, promote it:
--- update public.profiles set role = 'admin' where phone = '+45...';
+-- After the first account is email-verified, promote it:
+-- update public.profiles set role = 'admin' where email = 'admin@firma.dk';
