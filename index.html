@@ -90,7 +90,7 @@
   @media(max-width:600px){.material-card{grid-template-columns:80px 1fr;}.material-card .btn{grid-column:2;}.material-card img,.material-photo-placeholder{width:80px;height:70px;}}
 
   body.locked > *:not(#gate){display:none;}
-  body.locked > #users-overlay{display:flex;}
+  body.locked > #users-overlay{display:flex; z-index:110;}
   body:not(.is-admin) #fab-add,
   body:not(.is-admin) .ed-toggle,
   body:not(.is-admin) .material-edit-btn,
@@ -609,6 +609,7 @@
   }
   function showOverskud(){
     currentSite = 'overskud';
+    els.usersOverlay.hidden = true;
     els.gate.hidden = true;
     document.body.classList.remove('locked');
     document.getElementById('materiel-view').hidden = true;
@@ -623,6 +624,7 @@
   }
   function showMateriel(){
     currentSite = 'materiel';
+    els.usersOverlay.hidden = true;
     els.gate.hidden = true;
     document.body.classList.remove('locked');
     document.getElementById('overskud-header').hidden = false;
@@ -668,6 +670,7 @@
   }
   function changeSite(){
     try{ localStorage.removeItem('tl_site'); }catch(e){}
+    els.usersOverlay.hidden = true;
     document.body.classList.add('locked');
     document.getElementById('materiel-view').hidden = true;
     els.gateLogin.hidden = true;
