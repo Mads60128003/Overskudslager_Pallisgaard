@@ -136,11 +136,16 @@
 
   .card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow);
     overflow:hidden; display:flex; flex-direction:column; position:relative; }
-  .card-photo{aspect-ratio:4/3; background:var(--panel-2); position:relative; overflow:hidden;}
+  .card-photo{background:var(--panel-2); position:relative; overflow:hidden;}
   .card-photo img{width:100%; height:100%; object-fit:cover; display:block;}
-  .card-photo .gallery{width:100%; height:100%; position:relative;}
+  .card-photo .gallery{width:100%; position:relative;}
+  .gallery-main{aspect-ratio:4/3; position:relative;}
   .card-photo .gallery-nav{position:absolute; inset:auto 6px 6px; display:flex; justify-content:space-between; pointer-events:none;}
   .card-photo .gallery-nav button{pointer-events:auto; width:28px; height:28px; border:0; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; cursor:pointer;}
+  .gallery-thumbs{display:flex; gap:5px; padding:5px; overflow-x:auto; background:var(--panel-2);}
+  .gallery-thumb{width:34px; height:30px; padding:0; flex:none; border:2px solid transparent; border-radius:4px; overflow:hidden; background:var(--panel); cursor:pointer;}
+  .gallery-thumb.active{border-color:var(--accent);}
+  .gallery-thumb img{width:100%; height:100%; object-fit:cover;}
   .card-photo .placeholder{width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:var(--ink-faint);}
   .card-photo .placeholder svg{width:38px; height:38px;}
   .card-tools{position:absolute; top:6px; right:6px; display:flex; gap:4px;}
@@ -519,7 +524,12 @@
     var controls = paths.length > 1
       ? '<div class="gallery-nav"><button type="button" class="gallery-prev" aria-label="Forrige billede">‹</button><button type="button" class="gallery-next" aria-label="Næste billede">›</button></div>'
       : '';
-    return '<div class="gallery" data-gallery-index="0" data-gallery-paths="'+esc(JSON.stringify(paths))+'"><img class="'+(className||'')+'" src="'+esc(url)+'" alt="">'+controls+'</div>';
+    var thumbs = paths.length > 1
+      ? '<div class="gallery-thumbs">'+paths.map(function(path,index){
+          return '<button type="button" class="gallery-thumb'+(index===0?' active':'')+'" data-thumb-index="'+index+'" aria-label="Vis billede '+(index+1)+'"><img src="'+esc(photoUrl(path))+'" alt=""></button>';
+        }).join('')+'</div>'
+      : '';
+    return '<div class="gallery" data-gallery-index="0" data-gallery-paths="'+esc(JSON.stringify(paths))+'"><div class="gallery-main"><img class="'+(className||'')+'" src="'+esc(url)+'" alt="">'+controls+'</div>'+thumbs+'</div>';
   }
 
   function compressPhoto(file, cb){
@@ -991,6 +1001,21 @@
           index = (index + (btn.classList.contains('gallery-next') ? 1 : paths.length - 1)) % paths.length;
           gallery.setAttribute('data-gallery-index', index);
           gallery.querySelector('img').src = photoUrl(paths[index]);
+          gallery.querySelectorAll('.gallery-thumb').forEach(function(thumb){
+            thumb.classList.toggle('active', parseInt(thumb.getAttribute('data-thumb-index'),10) === index);
+          });
+        });
+      });
+      card.querySelectorAll('.gallery-thumb').forEach(function(thumb){
+        thumb.addEventListener('click', function(){
+          var gallery = card.querySelector('.gallery');
+          var paths = JSON.parse(gallery.getAttribute('data-gallery-paths'));
+          var index = parseInt(thumb.getAttribute('data-thumb-index'),10) || 0;
+          gallery.setAttribute('data-gallery-index', index);
+          gallery.querySelector('.gallery-main img').src = photoUrl(paths[index]);
+          gallery.querySelectorAll('.gallery-thumb').forEach(function(other){
+            other.classList.toggle('active', other === thumb);
+          });
         });
       });
       var edSave = card.querySelector('.ed-save');
