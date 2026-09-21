@@ -335,7 +335,7 @@
         <div class="photo-preview" id="photo-preview">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.5"/></svg>
         </div>
-        <label class="btn file-btn">Tag / vælg billeder<input type="file" id="f-photo" accept="image/*" capture="environment" multiple></label>
+        <label class="btn file-btn">Tilføj billede(r) (maks. 5)<input type="file" id="f-photo" accept="image/*" capture="environment" multiple></label>
       </div>
     </div>
     <div class="field"><label for="f-note">Note (valgfri)</label><input id="f-note" type="text" placeholder="fx fra nedrivning på Kildevej 12"></div>
@@ -1288,17 +1288,16 @@
   });
 
   els.fPhoto.addEventListener('change', function(){
-    var files = Array.prototype.slice.call(els.fPhoto.files || []).slice(0,5);
+    var remaining = 5 - pendingPhotoPaths.length;
+    var files = Array.prototype.slice.call(els.fPhoto.files || []).slice(0, remaining);
     if(!files.length) return;
     els.photoPreview.innerHTML = '<span style="font-size:.65rem;color:var(--ink-faint);">Behandler '+files.length+' billede(r)…</span>';
-    pendingPhotoPaths = [];
     var done = 0, failed = false;
     files.forEach(function(file){
       compressPhoto(file, function(err, dataUrl){
         if(failed) return;
         if(err){
           failed = true;
-          pendingPhotoPaths = [];
           els.photoPreview.innerHTML='<span style="font-size:.6rem;color:var(--low);">Et billede kunne ikke læses</span>';
           return;
         }
@@ -1306,10 +1305,11 @@
         done++;
         if(done === files.length){
           els.photoPreview.innerHTML = '<img src="'+esc(pendingPhotoPaths[0])+'" alt=""><span style="font-size:.72rem;color:var(--ink-soft);">'+done+' billeder valgt</span>';
-          showToast(done+' billeder er klar til at blive gemt.');
+          showToast(pendingPhotoPaths.length+' billeder er klar til at blive gemt.');
         }
       });
     });
+    els.fPhoto.value = '';
   });
 
   document.getElementById('save-add-btn').addEventListener('click', function(){
