@@ -251,6 +251,31 @@
   </div>
 </div>
 
+<div class="overlay" id="signup-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="signup-title">
+    <div class="modal-head">
+      <h2 id="signup-title">Opret bruger</h2>
+      <button class="btn btn-quiet" id="close-signup-btn" type="button" aria-label="Luk">×</button>
+    </div>
+    <p>Udfyld e-mail og adgangskode for at ansøge om en bruger.</p>
+    <form id="signup-form">
+      <div class="field">
+        <label for="signup-email">E-mail</label>
+        <input id="signup-email" type="email" placeholder="navn@firma.dk" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="signup-password">Adgangskode</label>
+        <input id="signup-password" type="password" placeholder="Mindst 6 tegn" autocomplete="new-password" minlength="6" required>
+      </div>
+      <p class="form-msg" id="signup-error"></p>
+      <div class="modal-actions">
+        <button class="btn" id="cancel-signup-btn" type="button">Annullér</button>
+        <button class="btn btn-primary" type="submit">Opret bruger</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <header class="topbar" id="overskud-header">
   <button class="btn back-btn" id="back-btn" type="button" aria-label="Gå tilbage" title="Gå tilbage" disabled>←</button>
   <div class="brand">
@@ -460,6 +485,13 @@
     gateStatus: document.getElementById('gate-status'),
     gateSubmit: document.getElementById('gate-submit'),
     gateSignup: document.getElementById('gate-signup'),
+    signupOverlay: document.getElementById('signup-overlay'),
+    signupForm: document.getElementById('signup-form'),
+    signupEmail: document.getElementById('signup-email'),
+    signupPassword: document.getElementById('signup-password'),
+    signupError: document.getElementById('signup-error'),
+    closeSignup: document.getElementById('close-signup-btn'),
+    cancelSignup: document.getElementById('cancel-signup-btn'),
     gateLogout: document.getElementById('gate-logout'),
     openUsersGate: document.getElementById('open-users-from-gate'),
     openUsers: document.getElementById('open-users-btn'),
@@ -608,13 +640,33 @@
     els.gateError.className = '';
     showSiteChoice();
   }
-  async function signUp(){
-    var email = els.gateEmail.value.trim();
-    var password = els.gatePassword.value;
-    els.gateError.textContent = '';
-    if(!email || password.length < 6){ els.gateError.textContent = 'E-mail og adgangskode (min. 6 tegn) skal udfyldes.'; return; }
+  function openSignup(){
+    els.signupError.textContent = '';
+    els.signupOverlay.hidden = false;
+    setTimeout(function(){ els.signupEmail.focus(); }, 30);
+  }
+  function closeSignup(){
+    els.signupOverlay.hidden = true;
+    els.signupForm.reset();
+    els.signupError.textContent = '';
+  }
+  async function signUp(e){
+    if(e) e.preventDefault();
+    var email = els.signupEmail.value.trim();
+    var password = els.signupPassword.value;
+    els.signupError.textContent = '';
+    if(!email || !password){
+      els.signupError.textContent = 'E-mail og adgangskode skal udfyldes.';
+      return;
+    }
+    if(password.length < 6){
+      els.signupError.textContent = 'Adgangskoden skal være mindst 6 tegn.';
+      return;
+    }
     var result = await sb.auth.signUp({email:email, password:password});
-    if(result.error){ els.gateError.textContent = result.error.message; return; }
+    if(result.error){ els.signupError.textContent = result.error.message; return; }
+    closeSignup();
+    els.gateError.className = 'info';
     els.gateError.textContent = 'Bruger oprettet. Tjek e-mailen og bekræft din konto, før du logger ind.';
   }
   function showSiteChoice(){
@@ -704,7 +756,10 @@
     els.gate.hidden = false;
   }
   els.gateSubmit.addEventListener('click', signIn);
-  els.gateSignup.addEventListener('click', signUp);
+  els.gateSignup.addEventListener('click', openSignup);
+  els.signupForm.addEventListener('submit', signUp);
+  els.closeSignup.addEventListener('click', closeSignup);
+  els.cancelSignup.addEventListener('click', closeSignup);
   els.gateLogout.addEventListener('click', async function(){
     await sb.auth.signOut();
     authUser = null;
