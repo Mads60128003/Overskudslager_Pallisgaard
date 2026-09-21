@@ -53,6 +53,8 @@
     position:fixed; inset:0; background:var(--paper); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px;
   }
   #gate[hidden]{display:none;}
+  #gate-login[hidden]{display:none !important;}
+  #site-choice[hidden]{display:none !important;}
   .gate-card{
     background:var(--panel); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow);
     padding:32px 26px; width:100%; max-width:360px; text-align:center; display:flex; flex-direction:column; gap:14px;
@@ -90,6 +92,7 @@
   @media(max-width:600px){.material-card{grid-template-columns:80px 1fr;}.material-card .btn{grid-column:2;}.material-card img,.material-photo-placeholder{width:80px;height:70px;}}
 
   body.locked > *:not(#gate){display:none;}
+  body.locked > #users-overlay{display:flex; z-index:110;}
   body:not(.is-admin) #fab-add,
   body:not(.is-admin) .ed-toggle,
   body:not(.is-admin) .material-edit-btn,
@@ -597,7 +600,9 @@
     els.gateStatus.textContent = '';
     els.siteChoice.querySelectorAll('[data-site-choice]').forEach(function(btn){ btn.hidden = false; });
     els.gateLogin.hidden = true;
+    els.gateLogin.style.display = 'none';
     els.siteChoice.hidden = false;
+    els.siteChoice.style.display = 'flex';
     els.gate.hidden = false;
     document.body.classList.add('locked');
     document.getElementById('overskud-header').hidden = true;
@@ -608,6 +613,7 @@
   }
   function showOverskud(){
     currentSite = 'overskud';
+    els.usersOverlay.hidden = true;
     els.gate.hidden = true;
     document.body.classList.remove('locked');
     document.getElementById('materiel-view').hidden = true;
@@ -622,6 +628,7 @@
   }
   function showMateriel(){
     currentSite = 'materiel';
+    els.usersOverlay.hidden = true;
     els.gate.hidden = true;
     document.body.classList.remove('locked');
     document.getElementById('overskud-header').hidden = false;
@@ -667,6 +674,7 @@
   }
   function changeSite(){
     try{ localStorage.removeItem('tl_site'); }catch(e){}
+    els.usersOverlay.hidden = true;
     document.body.classList.add('locked');
     document.getElementById('materiel-view').hidden = true;
     els.gateLogin.hidden = true;
@@ -687,7 +695,9 @@
     els.gateStatus.textContent = '';
     els.siteChoice.querySelectorAll('[data-site-choice]').forEach(function(btn){ btn.hidden = false; });
     els.siteChoice.hidden = true;
+    els.siteChoice.style.display = 'none';
     els.gateLogin.hidden = false;
+    els.gateLogin.style.display = '';
     els.gate.hidden = false;
   });
   els.gatePassword.addEventListener('keydown', function(e){ if(e.key === 'Enter') signIn(); });
