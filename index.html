@@ -66,6 +66,7 @@
   }
   #gate-email:focus,#gate-password:focus{outline:2px solid var(--accent); outline-offset:1px;}
   #gate-error{color:var(--low); font-size:.82rem; min-height:1.2em;}
+  #gate-error.info{color:var(--ink-soft);}
   .site-choice{display:flex; flex-direction:column; gap:10px;}
   .site-choice .btn{justify-content:center; padding:13px 16px;}
   #materiel-view{max-width:980px; margin:24px auto; padding:0 16px;}
@@ -199,6 +200,12 @@
   .modal-actions{display:flex; gap:10px; margin-top:4px;}
   .modal-actions .btn{flex:1; justify-content:center; padding:11px;}
   .form-msg{font-size:.8rem; color:var(--low); min-height:1em;}
+  .user-list{display:grid; gap:8px;}
+  .user-row{display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); font-size:.82rem;}
+  .user-row:last-child{border-bottom:0;}
+  .user-meta{color:var(--ink-soft); font-size:.72rem;}
+  .user-actions{display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end;}
+  .user-actions .btn{padding:6px 9px; font-size:.72rem;}
 
   .fab{ position:fixed; right:18px; bottom:18px; z-index:30; width:56px; height:56px; border-radius:50%; border:none;
     background:var(--accent); color:var(--accent-ink); box-shadow:var(--shadow); cursor:pointer; display:flex; align-items:center; justify-content:center; }
@@ -226,9 +233,11 @@
       <button class="btn" id="gate-signup" type="button">Opret bruger</button>
     </div>
     <div class="site-choice" id="site-choice" hidden>
+      <p id="gate-status" class="info"></p>
       <p>Hvad vil du åbne?</p>
       <button class="btn btn-primary" data-site-choice="overskud">Overskudsmaterialer</button>
       <button class="btn" data-site-choice="materiel">Materiel</button>
+      <button class="btn" id="open-users-from-gate" type="button" hidden>Brugeradministration</button>
       <button class="btn btn-quiet" id="gate-logout" type="button">Log ud</button>
     </div>
   </div>
@@ -248,11 +257,24 @@
     <input id="search" type="search" placeholder="Søg efter vare…" autocomplete="off">
   </div>
   <button class="btn" data-change-site type="button">Skift område</button>
+  <button class="btn" id="open-users-btn" type="button" hidden>Brugere</button>
   <button class="btn btn-primary" id="open-add-btn">
     <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     <span id="add-action-label">Ny vare</span>
   </button>
 </header>
+
+<div class="overlay" id="users-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="users-title">
+    <div class="modal-head">
+      <h2 id="users-title">Brugeradministration</h2>
+      <button class="btn btn-quiet" id="close-users-btn" type="button" aria-label="Luk">×</button>
+    </div>
+    <p class="user-meta">Godkend kun brugere, du kender. Ændringer træder i kraft med det samme.</p>
+    <div class="user-list" id="user-list"></div>
+    <p class="form-msg" id="users-msg" role="status"></p>
+  </div>
+</div>
 
 <section id="materiel-view" hidden>
   <div class="material-header"><div><h2>Materiel</h2><p>Opret og hold styr på materiel, der kan lånes ud.</p></div><button class="btn" data-change-site type="button">Skift område</button></div>
@@ -401,6 +423,7 @@
   var pollTimer = null;
   var authUser = null;
   var userRole = "user";
+  var userStatus = "pending";
 
   var els = {
     chiprow: document.getElementById('chiprow'),
@@ -426,9 +449,16 @@
     gateEmail: document.getElementById('gate-email'),
     gatePassword: document.getElementById('gate-password'),
     gateError: document.getElementById('gate-error'),
+    gateStatus: document.getElementById('gate-status'),
     gateSubmit: document.getElementById('gate-submit'),
     gateSignup: document.getElementById('gate-signup'),
     gateLogout: document.getElementById('gate-logout'),
+    openUsersGate: document.getElementById('open-users-from-gate'),
+    openUsers: document.getElementById('open-users-btn'),
+    usersOverlay: document.getElementById('users-overlay'),
+    closeUsers: document.getElementById('close-users-btn'),
+    userList: document.getElementById('user-list'),
+    usersMsg: document.getElementById('users-msg'),
     materialForm: document.getElementById('material-form'),
     materialOverlay: document.getElementById('material-overlay'),
     materialName: document.getElementById('m-name'),
@@ -510,12 +540,32 @@
 
   /* ---------------- gate ---------------- */
 
-  async function loadRole(){
+  async function loadProfile(){
     userRole = "user";
-    if(!authUser || !sb) return;
-    var result = await sb.from('profiles').select('role').eq('id', authUser.id).maybeSingle();
-    if(!result.error && result.data && result.data.role === 'admin') userRole = 'admin';
+    userStatus = "pending";
+    if(!authUser || !sb) return null;
+    var result = await sb.from('profiles').select('role,status').eq('id', authUser.id).maybeSingle();
+    if(!result.error && result.data){
+      userRole = result.data.role === 'admin' ? 'admin' : 'user';
+      userStatus = result.data.status || (userRole === 'admin' ? 'approved' : 'pending');
+    }
     document.body.classList.toggle('is-admin', userRole === 'admin');
+    els.openUsers.hidden = userRole !== 'admin';
+    els.openUsersGate.hidden = userRole !== 'admin';
+    return result;
+  }
+  async function rejectUnapproved(){
+    var message = userStatus === 'rejected'
+      ? 'Din bruger er afvist. Kontakt en administrator.'
+      : userStatus === 'inactive'
+        ? 'Din bruger er deaktiveret. Kontakt en administrator.'
+        : 'Din e-mail er bekræftet, men en administrator skal godkende din bruger først.';
+    els.gateLogin.hidden = true;
+    els.siteChoice.hidden = false;
+    els.gateStatus.textContent = message;
+    els.siteChoice.querySelectorAll('[data-site-choice]').forEach(function(btn){ btn.hidden = true; });
+    await sb.auth.signOut();
+    authUser = null;
   }
   async function signIn(){
     var email = els.gateEmail.value.trim();
@@ -525,7 +575,12 @@
     var result = await sb.auth.signInWithPassword({email:email, password:password});
     if(result.error){ els.gateError.textContent = result.error.message; return; }
     authUser = result.data.user;
-    await loadRole();
+    await loadProfile();
+    if(userRole !== 'admin' && userStatus !== 'approved'){
+      await rejectUnapproved();
+      return;
+    }
+    els.gateError.className = '';
     showSiteChoice();
   }
   async function signUp(){
@@ -538,6 +593,9 @@
     els.gateError.textContent = 'Bruger oprettet. Tjek e-mailen og bekræft din konto, før du logger ind.';
   }
   function showSiteChoice(){
+    els.gateError.className = '';
+    els.gateStatus.textContent = '';
+    els.siteChoice.querySelectorAll('[data-site-choice]').forEach(function(btn){ btn.hidden = false; });
     els.gateLogin.hidden = true;
     els.siteChoice.hidden = false;
     els.gate.hidden = false;
@@ -621,7 +679,13 @@
     await sb.auth.signOut();
     authUser = null;
     userRole = "user";
+    userStatus = "pending";
     document.body.classList.remove('is-admin');
+    els.openUsers.hidden = true;
+    els.openUsersGate.hidden = true;
+    els.gateError.className = '';
+    els.gateStatus.textContent = '';
+    els.siteChoice.querySelectorAll('[data-site-choice]').forEach(function(btn){ btn.hidden = false; });
     els.siteChoice.hidden = true;
     els.gateLogin.hidden = false;
     els.gate.hidden = false;
@@ -640,7 +704,11 @@
   sb.auth.getSession().then(async function(result){
     authUser = result.data && result.data.session ? result.data.session.user : null;
     if(!authUser) return;
-    await loadRole();
+    await loadProfile();
+    if(userRole !== 'admin' && userStatus !== 'approved'){
+      await rejectUnapproved();
+      return;
+    }
     var savedSite = null;
     try{ savedSite = localStorage.getItem('tl_site'); }catch(e){}
     if(savedSite === 'materiel') showMateriel();
@@ -650,6 +718,53 @@
   sb.auth.onAuthStateChange(function(_event, session){
     authUser = session ? session.user : null;
   });
+
+  function statusLabel(status){
+    return {pending:'Afventer godkendelse', approved:'Godkendt', rejected:'Afvist', inactive:'Deaktiveret'}[status] || 'Ukendt';
+  }
+  function formatUserDate(value){
+    if(!value) return '';
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? '' : date.toLocaleDateString('da-DK');
+  }
+  function renderUsers(users){
+    if(!users.length){ els.userList.innerHTML = '<p class="user-meta">Ingen brugere fundet.</p>'; return; }
+    els.userList.innerHTML = users.map(function(user){
+      var isSelf = user.id === authUser.id;
+      var actions = isSelf ? '<span class="user-meta">Din konto</span>' :
+        '<button class="btn btn-primary" data-user-action="approved" data-user-id="'+esc(user.id)+'">Godkend</button>'+
+        '<button class="btn" data-user-action="rejected" data-user-id="'+esc(user.id)+'">Afvis</button>'+
+        '<button class="btn btn-danger" data-user-action="inactive" data-user-id="'+esc(user.id)+'">Deaktivér</button>';
+      return '<div class="user-row"><div><strong>'+esc(user.email || 'Ukendt e-mail')+'</strong><div class="user-meta">'+esc(user.role)+' · '+esc(statusLabel(user.status || 'approved'))+' · '+esc(formatUserDate(user.created_at))+'</div></div><div class="user-actions">'+actions+'</div></div>';
+    }).join('');
+    els.userList.querySelectorAll('[data-user-action]').forEach(function(btn){
+      btn.addEventListener('click', function(){ updateUserStatus(btn.getAttribute('data-user-id'), btn.getAttribute('data-user-action')); });
+    });
+  }
+  async function loadUsers(){
+    if(userRole !== 'admin' || !sb) return;
+    els.usersMsg.textContent = 'Henter brugere…';
+    var result = await sb.from('profiles').select('id,email,role,status,created_at').order('created_at',{ascending:false});
+    if(result.error){ els.usersMsg.textContent = 'Kunne ikke hente brugere: '+result.error.message; return; }
+    els.usersMsg.textContent = '';
+    renderUsers(result.data || []);
+  }
+  async function updateUserStatus(id, status){
+    if(userRole !== 'admin' || id === authUser.id) return;
+    els.usersMsg.textContent = 'Gemmer…';
+    var result = await sb.from('profiles').update({status:status}).eq('id', id);
+    if(result.error){ els.usersMsg.textContent = 'Kunne ikke gemme ændringen: '+result.error.message; return; }
+    showToast('Brugerstatus opdateret');
+    loadUsers();
+  }
+  function openUsers(){
+    if(userRole !== 'admin') return;
+    els.usersOverlay.hidden = false;
+    loadUsers();
+  }
+  els.openUsers.addEventListener('click', openUsers);
+  els.openUsersGate.addEventListener('click', openUsers);
+  els.closeUsers.addEventListener('click', function(){ els.usersOverlay.hidden = true; });
 
   /* ---------------- rendering ---------------- */
 
