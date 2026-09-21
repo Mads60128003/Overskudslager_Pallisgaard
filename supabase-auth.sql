@@ -73,6 +73,25 @@ drop policy if exists "Admins can update profiles" on public.profiles;
 create policy "Admins can update profiles" on public.profiles for update to authenticated
   using (public.current_role() = 'admin') with check (public.current_role() = 'admin');
 
+create or replace function public.validate_profile_role()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.role not in ('admin', 'user') then
+    raise exception 'Invalid profile role';
+  end if;
+  if new.status not in ('pending', 'approved', 'rejected', 'inactive') then
+    raise exception 'Invalid profile status';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists validate_profile_role on public.profiles;
+create trigger validate_profile_role
+  before insert or update on public.profiles
+  for each row execute procedure public.validate_profile_role();
+
 create or replace function public.restrict_user_item_updates()
 returns trigger language plpgsql security definer set search_path = public
 as $$
