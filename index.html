@@ -92,7 +92,7 @@
   .history-label{color:var(--ink-soft); font-size:.7rem;}
   @media(max-width:600px){.material-card{grid-template-columns:80px 1fr;}.material-card .btn{grid-column:2;}.material-card img,.material-photo-placeholder{width:80px;height:70px;}}
 
-  body.locked > *:not(#gate){display:none;}
+  body.locked > *:not(#gate):not(#signup-overlay){display:none;}
   body:not(.is-admin) #fab-add,
   body:not(.is-admin) .ed-toggle,
   body:not(.is-admin) .material-edit-btn,
