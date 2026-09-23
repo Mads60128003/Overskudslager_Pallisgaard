@@ -321,6 +321,7 @@
 
 <section id="materiel-view" hidden>
   <div class="material-header"><div><h2>Materiel</h2><p>Opret og hold styr på materiel, der kan lånes ud.</p></div><button class="btn" data-change-site type="button">Skift område</button></div>
+  <div class="chiprow" id="material-chiprow"></div>
   <div class="material-list" id="material-list"></div>
 </section>
 
@@ -470,6 +471,7 @@
 
   var els = {
     chiprow: document.getElementById('chiprow'),
+    materialChiprow: document.getElementById('material-chiprow'),
     content: document.getElementById('content'),
     empty: document.getElementById('empty-state'),
     search: document.getElementById('search'),
@@ -712,6 +714,7 @@
   }
   function showMateriel(){
     currentSite = 'materiel';
+    state.activeCat = 'all';
     els.usersOverlay.hidden = true;
     els.gate.hidden = true;
     document.body.classList.remove('locked');
@@ -1111,6 +1114,21 @@
       return '<option value="'+c.id+'">'+esc(c.name)+'</option>';
     }).join('');
   }
+  function renderMaterialChips(items){
+    var counts = {};
+    items.forEach(function(it){ counts[it.category_id] = (counts[it.category_id]||0) + 1; });
+    var html = '<button class="chip" data-material-cat="all" aria-pressed="'+(state.activeCat==='all')+'">Alle <span class="count">'+items.length+'</span></button>';
+    state.categories.forEach(function(c){
+      html += '<button class="chip" data-material-cat="'+c.id+'" aria-pressed="'+(state.activeCat===c.id)+'">'+esc(c.name)+' <span class="count">'+(counts[c.id]||0)+'</span></button>';
+    });
+    els.materialChiprow.innerHTML = html;
+    els.materialChiprow.querySelectorAll('[data-material-cat]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        state.activeCat = btn.getAttribute('data-material-cat');
+        renderMaterial(items);
+      });
+    });
+  }
   function refreshMaterial(){
     if(!sb) return;
     Promise.all([sb.from('categories').select('*').order('name'), sb.from('items').select('*')]).then(function(res){
@@ -1123,7 +1141,10 @@
     });
   }
   function renderMaterial(items){
-    var filtered = items.filter(matchesSearch);
+    renderMaterialChips(items);
+    var filtered = items.filter(function(it){
+      return (state.activeCat === 'all' || it.category_id === state.activeCat) && matchesSearch(it);
+    });
     if(!filtered.length){
       els.materialList.innerHTML = items.length ? '<p>Ingen materiel matcher søgningen.</p>' : '<p>Der er ikke oprettet materiel endnu.</p>';
       return;
